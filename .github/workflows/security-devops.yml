@@ -1,0 +1,48 @@
+name: Microsoft Security DevOps (IaC + Code Scan)
+
+# Demonstrates the GitHub <-> Microsoft Defender for Cloud DevOps security integration.
+#
+# This runs the Microsoft Security DevOps (MSDO) GitHub Action, which bundles several SAST/IaC
+# scanners (Template Analyzer for ARM/Bicep, Checkov, Terrascan, ESLint, Bandit, BinSkim, Trivy,
+# AntiMalware). Findings are uploaded as a SARIF file to the repository's Security tab and - once
+# this repository is connected as a DevOps resource in Defender for Cloud (Environment settings >
+# Add environment > GitHub) - also surface in the Defender for Cloud DevOps Security pane and
+# attack-path/Cloud Security Explorer views.
+#
+# NOTE: connecting the GitHub org/repo to Defender for Cloud is a one-time interactive OAuth step
+# done in the Azure Portal (Defender for Cloud > Environment settings > GitHub). It is not
+# ARM-scriptable, so it is not part of the infra/ templates. See docs/github-devops-integration.md.
+#
+# Reference: https://learn.microsoft.com/azure/defender-for-cloud/github-action
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1" # weekly Monday scan
+
+permissions:
+  contents: read
+  id-token: write
+  actions: read
+  security-events: write
+
+jobs:
+  msdo-scan:
+    name: Run Microsoft Security DevOps scan
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Microsoft Security DevOps
+        uses: microsoft/security-devops-action@latest
+        id: msdo
+
+      - name: Upload SARIF to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ${{ steps.msdo.outputs.sarifFile }}

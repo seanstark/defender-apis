@@ -1,0 +1,45 @@
+name: Backend CI
+
+# Fast sanity checks for the mock API backend on every PR/push - install deps and verify the
+# server module loads without throwing. Keeps deploy-infra.yml focused purely on deployment.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "api/**"
+      - ".github/workflows/ci-backend.yml"
+  pull_request:
+    paths:
+      - "api/**"
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./api
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+          cache-dependency-path: api/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci || npm install
+
+      - name: Verify server boots
+        run: |
+          node -e "require('./src/server.js')" &
+          SERVER_PID=$!
+          sleep 2
+          curl -sf http://localhost:3000/healthz
+          kill $SERVER_PID

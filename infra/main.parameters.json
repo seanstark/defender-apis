@@ -1,0 +1,13 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "namePrefix": { "value": "dfapi" },
+    "staticSiteLocation": { "value": "eastus2" },
+    "apimPublisherEmail": { "value": "REPLACE_WITH_YOUR_EMAIL@example.com" },
+    "apimPublisherName": { "value": "Defender for APIs Demo" },
+    "apimSku": { "value": "Developer" },
+    "appServicePlanSku": { "value": "B1" },
+    "nodeVersion": { "value": "18-lts" }
+  }
+}

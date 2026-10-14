@@ -1,0 +1,20 @@
+{
+  "name": "defender-apis-mock-workload",
+  "version": "1.0.0",
+  "description": "Mock API workload used to evaluate Microsoft Defender for Cloud API security posture and Defender for APIs capabilities.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "morgan": "^1.10.0",
+    "uuid": "^9.0.1"
+  },
+  "license": "MIT"
+}

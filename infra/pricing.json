@@ -1,0 +1,44 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-08-01/subscriptionDeploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "description": "OPTIONAL subscription-scope deployment that enables the Microsoft Defender for Cloud plans required for this demo: Defender for APIs (Api/P1) and Defender Cloud Security Posture Management (CloudPosture), which drives API security posture findings. Requires Owner or Security Admin rights on the subscription. Deploy with: az deployment sub create --location <region> --template-file infra/pricing.json"
+  },
+  "parameters": {
+    "enableDefenderForApis": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": { "description": "Enable Microsoft Defender for APIs (Standard tier, P1 sub-plan)." }
+    },
+    "enableDefenderCspm": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": { "description": "Enable Defender Cloud Security Posture Management, required for API security posture (discovery/inventory) findings." }
+    }
+  },
+  "resources": [
+    {
+      "condition": "[parameters('enableDefenderForApis')]",
+      "type": "Microsoft.Security/pricings",
+      "apiVersion": "2024-01-01",
+      "name": "Api",
+      "properties": {
+        "pricingTier": "Standard",
+        "subPlan": "P1"
+      }
+    },
+    {
+      "condition": "[parameters('enableDefenderCspm')]",
+      "type": "Microsoft.Security/pricings",
+      "apiVersion": "2024-01-01",
+      "name": "CloudPosture",
+      "properties": {
+        "pricingTier": "Standard"
+      }
+    }
+  ],
+  "outputs": {
+    "defenderForApisEnabled": { "type": "bool", "value": "[parameters('enableDefenderForApis')]" },
+    "defenderCspmEnabled": { "type": "bool", "value": "[parameters('enableDefenderCspm')]" }
+  }
+}

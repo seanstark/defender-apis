@@ -1,0 +1,47 @@
+name: Deploy Website (Azure Static Web Apps)
+
+# Publishes the interactive synthetic-traffic-generator website in /website to the
+# Azure Static Web App created by infra/main.json.
+#
+# The Static Web App resource is created with skipGithubActionWorkflowGeneration=true and no
+# repositoryUrl, so there is no portal-managed workflow to conflict with this one. Authentication
+# uses the Static Web Apps deployment token retrieved from the resource and stored as the
+# AZURE_STATIC_WEB_APPS_API_TOKEN repository secret (see docs/deployment.md).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "website/**"
+      - ".github/workflows/deploy-website.yml"
+  workflow_dispatch:
+    inputs:
+      apimGatewayUrl:
+        description: "Optional: APIM gateway base URL to pre-fill in the website config (e.g. https://xyz.azure-api.net/retail). Leave blank to configure it in the browser UI instead."
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-website:
+    name: Build and deploy static site
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Inject API base URL (optional)
+        if: ${{ github.event.inputs.apimGatewayUrl != '' }}
+        run: |
+          echo "window.DEFAULT_API_BASE_URL = \"${{ github.event.inputs.apimGatewayUrl }}\";" > website/assets/config.js
+
+      - name: Deploy to Azure Static Web Apps
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: "upload"
+          app_location: "/website"
+          output_location: ""
+          skip_app_build: true

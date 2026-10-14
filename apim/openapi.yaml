@@ -1,0 +1,270 @@
+openapi: 3.0.3
+info:
+  title: Defender for APIs Demo - Synthetic Retail API
+  description: >
+    Synthetic e-commerce API used exclusively to demonstrate Microsoft Defender
+    for Cloud's API security posture management and Defender for APIs
+    capabilities. Every data value returned by this API is programmatically
+    generated and fake -- no real customer, payment, or personal data is
+    used anywhere in this project.
+  version: "1.0.0"
+servers:
+  - url: /retail
+    description: Published behind Azure API Management as the "retail" API.
+tags:
+  - name: Customers
+  - name: Orders
+  - name: Products
+  - name: Admin
+  - name: Search
+  - name: Tools
+paths:
+  /api/customers:
+    get:
+      tags: [Customers]
+      summary: List customers (paged)
+      description: Returns paged customer records including PII (email, phone, SSN, address, payment methods).
+      operationId: listCustomers
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        "200":
+          description: Paged customer list
+  /api/customers/{id}:
+    get:
+      tags: [Customers]
+      summary: Get customer by sequential numeric id
+      description: >
+        Intentional enumeration target -- ids are sequential integers from 1-500,
+        with no authorization check, modeling a BOLA / parameter enumeration
+        scenario used to demonstrate API_ParameterEnumeration /
+        API_DistributedParameterEnumeration.
+      operationId: getCustomerById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Customer record
+        "404":
+          description: Not found
+  /api/customers/{id}/payment-methods:
+    get:
+      tags: [Customers]
+      summary: Get a customer's payment methods (unauthenticated)
+      description: >
+        Deliberately unauthenticated sensitive-data endpoint exposing fake
+        credit card numbers, modeling an API security posture finding
+        (sensitive data exposed without authentication).
+      operationId: getCustomerPaymentMethods
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Payment methods
+        "404":
+          description: Not found
+  /api/orders:
+    get:
+      tags: [Orders]
+      summary: List/filter orders
+      description: >
+        Supports status/customerId/sort/page/pageSize filters. Unknown query
+        parameters or type-mismatched known parameters are reported back in
+        _unrecognizedParams/_typeMismatches to help demonstrate
+        API_UnseenParam / API_UnseenParamType.
+      operationId: listOrders
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: customerId
+          in: query
+          schema: { type: integer }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        "200":
+          description: Paged order list
+    post:
+      tags: [Orders]
+      summary: Create a synthetic order (not persisted)
+      description: Accepts any JSON body; used to drive the request-payload variant of API_SpikeInPayload.
+      operationId: createOrder
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "201":
+          description: Created (synthetic, non-persisted) order
+  /api/orders/{id}:
+    get:
+      tags: [Orders]
+      summary: Get order by sequential numeric id
+      description: Enumeration target (ids 1-800), paired with /api/customers/{id}.
+      operationId: getOrderById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Order record
+        "404":
+          description: Not found
+  /api/products:
+    get:
+      tags: [Products]
+      summary: List/browse products (public, non-sensitive)
+      description: Healthy/baseline traffic surface -- no PII involved.
+      operationId: listProducts
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20 }
+        - name: category
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Paged product list
+  /api/products/{id}:
+    get:
+      tags: [Products]
+      summary: Get product by id
+      operationId: getProductById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Product record
+        "404":
+          description: Not found
+  /api/admin/users:
+    get:
+      tags: [Admin]
+      summary: List admin users (unauthenticated, exposes fake API keys)
+      description: >
+        Deliberately unauthenticated BOLA-style finding; returns synthetic
+        administrator accounts including fake API keys. Designed to surface
+        in API security posture scanning as an unauthenticated/sensitive endpoint.
+      operationId: listAdminUsers
+      responses:
+        "200":
+          description: Admin user list
+  /api/admin/export:
+    get:
+      tags: [Admin]
+      summary: Full data export (large response, unauthenticated)
+      description: >
+        Dumps every synthetic customer and order record in one response.
+        Combine with a high request volume to help demonstrate the
+        response-payload variant of API_SpikeInPayload.
+      operationId: exportAllData
+      responses:
+        "200":
+          description: Full export payload
+  /api/search:
+    get:
+      tags: [Search]
+      summary: Freeform product search
+      description: >
+        Accepts an open-ended set of query parameters (q, category, minPrice,
+        maxPrice, plus anything else). Useful for driving
+        API_UnseenParam / API_UnseenParamType / API_SprayInRequests.
+      operationId: searchProducts
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string }
+        - name: category
+          in: query
+          schema: { type: string }
+        - name: minPrice
+          in: query
+          schema: { type: number }
+        - name: maxPrice
+          in: query
+          schema: { type: number }
+      responses:
+        "200":
+          description: Search results
+  /api/tools/health:
+    get:
+      tags: [Tools]
+      summary: Baseline health/liveness check
+      operationId: toolsHealth
+      responses:
+        "200":
+          description: OK
+  /api/tools/echo:
+    get:
+      tags: [Tools]
+      summary: Echo back headers/query/body
+      operationId: toolsEcho
+      responses:
+        "200":
+          description: Echoed request
+  /api/tools/large-report:
+    get:
+      tags: [Tools]
+      summary: Generate a large synthetic report response
+      description: Used to demonstrate the response-payload variant of API_SpikeInPayload.
+      operationId: toolsLargeReport
+      parameters:
+        - name: sizeKb
+          in: query
+          schema: { type: integer, default: 256 }
+      responses:
+        "200":
+          description: Large synthetic report
+  /api/tools/upload:
+    post:
+      tags: [Tools]
+      summary: Accept an arbitrary JSON body
+      description: Used to demonstrate the request-payload variant of API_SpikeInPayload.
+      operationId: toolsUpload
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "201":
+          description: Upload accepted
+  /api/tools/delay:
+    get:
+      tags: [Tools]
+      summary: Sleep for a configurable duration before responding
+      description: Used to demonstrate API_SpikeInLatency.
+      operationId: toolsDelay
+      parameters:
+        - name: ms
+          in: query
+          schema: { type: integer, default: 1000 }
+      responses:
+        "200":
+          description: Delayed response

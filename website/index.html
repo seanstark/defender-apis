@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Defender for APIs - Synthetic Traffic Generator</title>
+  <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="brand">
+        <span class="brand-icon">&#128737;</span>
+        <div>
+          <h1>Defender for APIs Demo Console</h1>
+          <p class="subtitle">Synthetic traffic generator for the mock retail workload - drives Microsoft Defender for Cloud / Defender for APIs alerts and API security posture findings.</p>
+        </div>
+      </div>
+      <a class="docs-link" href="https://learn.microsoft.com/azure/defender-for-cloud/alerts-defender-for-apis" target="_blank" rel="noopener">Alert reference &#8599;</a>
+    </div>
+  </header>
+
+  <main>
+    <section class="card settings-card" id="settings-card">
+      <h2>1. Connect to your API</h2>
+      <p>Enter the API base URL - the APIM gateway URL plus the published API path suffix (default <code>/retail</code>), for example:
+        <code>https://&lt;apim-name&gt;.azure-api.net/retail</code>.
+        You can also point this directly at the App Service URL for local/backend-only testing.</p>
+      <div class="settings-row">
+        <input type="text" id="api-base-url" placeholder="https://your-apim-name.azure-api.net/retail" autocomplete="off" />
+        <button id="btn-save-url" class="btn btn-primary">Save</button>
+        <button id="btn-test-connection" class="btn btn-secondary">Test connection</button>
+        <span id="connection-status" class="status-pill status-unknown">Not tested</span>
+      </div>
+    </section>
+
+    <section class="card" id="baseline-card">
+      <div class="card-head">
+        <h2>2. Continuous baseline traffic <span class="badge badge-info">Context</span></h2>
+        <label class="switch">
+          <input type="checkbox" id="baseline-toggle" />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <p>Several Defender for APIs anomaly detections (traffic spikes, latency spikes, payload spikes) require roughly a
+        <strong>30-day learning period</strong> of normal traffic before they can recognize a deviation. Toggle this on to
+        generate a steady trickle of lightweight, "normal" requests (<code>GET /api/products</code>, <code>GET /api/tools/health</code>)
+        every few seconds in the background while you work through the scenarios below.</p>
+      <p class="hint" id="baseline-status">Baseline traffic is currently <strong>off</strong>.</p>
+    </section>
+
+    <h2 class="section-title">3. Alert &amp; posture scenarios</h2>
+    <div class="scenario-grid" id="scenario-grid"><!-- cards rendered by app.js --></div>
+
+    <section class="card" id="console-card">
+      <div class="card-head">
+        <h2>Activity log</h2>
+        <button id="btn-clear-log" class="btn btn-secondary btn-small">Clear</button>
+      </div>
+      <pre id="console-log" aria-live="polite"></pre>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>All data returned by this API is synthetic and generated at random on server start. No real customer, payment, or identity data is involved.
+      This site is a demonstration aid for Microsoft Defender for Cloud's API security posture management and Defender for APIs capabilities -
+      see <a href="https://learn.microsoft.com/azure/defender-for-cloud/api-security-posture-overview" target="_blank" rel="noopener">API security posture overview</a>.</p>
+  </footer>
+
+  <script src="assets/config.js"></script>
+  <script src="assets/app.js"></script>
+</body>
+</html>

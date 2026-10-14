@@ -1,0 +1,10 @@
+{
+    "chat.editor.preferCopilotHarness": false,
+    "chat.defaultToCopilotHarness": false,
+    "python.analysis.extraPaths": [
+        "c:\\Users\\seanstark\\.vscode\\extensions\\ms-security.ms-sentinel-1.2.0\\python",
+        "c:\\Users\\seanstark\\.vscode\\extensions\\ms-security.ms-sentinel-2.2.0\\python",
+        "c:\\Users\\seanstark\\.vscode\\extensions\\ms-security.ms-sentinel-2.3.0\\python",
+        "c:\\Users\\seanstark\\.vscode\\extensions\\ms-security.ms-sentinel-2.4.0\\python"
+    ]
+}

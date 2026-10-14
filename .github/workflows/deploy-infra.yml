@@ -1,0 +1,169 @@
+name: Deploy Infrastructure (ARM)
+
+# Deploys the mock API workload used to evaluate Microsoft Defender for Cloud's
+# API security posture management and Defender for APIs capabilities.
+#
+# This workflow deploys the ARM templates in /infra in three stages:
+#   1. main.json            - core infra shell (App Service, APIM, Static Web App, Log Analytics, App Insights)
+#   2. api-onboarding.json  - imports the OpenAPI spec into APIM and onboards the API into Defender for APIs
+#   3. pricing.json         - (optional) enables Defender CSPM + Defender for APIs plans at the subscription scope
+#
+# Authentication uses OpenID Connect (OIDC) federated credentials - no client secret is stored in GitHub.
+# See docs/deployment.md for how to create the Azure AD App Registration / federated credential and
+# configure the required repository secrets.
+
+on:
+  workflow_dispatch:
+    inputs:
+      enableDefenderPlans:
+        description: "Also enable Defender for APIs + Defender CSPM subscription plans (pricing.json)"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "true"
+          - "false"
+      appServicePlanSku:
+        description: "App Service Plan SKU (use F1 if your subscription has no B1/Standard quota)"
+        required: false
+        default: "B1"
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP || 'rg-defender-apis-demo' }}
+  AZURE_LOCATION: ${{ vars.AZURE_LOCATION || 'eastus2' }}
+
+jobs:
+  deploy-main:
+    name: Deploy core infrastructure
+    runs-on: ubuntu-latest
+    outputs:
+      apimServiceName: ${{ steps.deploy.outputs.apimServiceName }}
+      apimGatewayUrl: ${{ steps.deploy.outputs.apimGatewayUrl }}
+      webAppName: ${{ steps.deploy.outputs.webAppName }}
+      webAppHostName: ${{ steps.deploy.outputs.webAppHostName }}
+      staticSiteName: ${{ steps.deploy.outputs.staticSiteName }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Ensure resource group exists
+        run: |
+          az group show -n "${{ env.AZURE_RESOURCE_GROUP }}" -o none 2>/dev/null || \
+          az group create -n "${{ env.AZURE_RESOURCE_GROUP }}" -l "${{ env.AZURE_LOCATION }}" -o none
+
+      - name: Deploy main.json
+        id: deploy
+        uses: azure/arm-deploy@v2
+        with:
+          scope: resourcegroup
+          resourceGroupName: ${{ env.AZURE_RESOURCE_GROUP }}
+          template: ./infra/main.json
+          parameters: >
+            ./infra/main.parameters.json
+            apimPublisherEmail=${{ secrets.APIM_PUBLISHER_EMAIL }}
+            appServicePlanSku=${{ github.event.inputs.appServicePlanSku }}
+          deploymentName: defender-apis-main-${{ github.run_number }}
+          failOnStdErr: false
+
+  deploy-backend:
+    name: Deploy mock API backend code
+    needs: deploy-main
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+          cache-dependency-path: api/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./api
+        run: npm ci || npm install
+
+      - name: Zip app
+        working-directory: ./api
+        run: zip -r ../api-release.zip . -x "node_modules/.cache/*"
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy to App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ needs.deploy-main.outputs.webAppName }}
+          package: api-release.zip
+
+  onboard-api:
+    name: Import API into APIM + onboard to Defender for APIs
+    needs: [deploy-main, deploy-backend]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy api-onboarding.json
+        uses: azure/arm-deploy@v2
+        with:
+          scope: resourcegroup
+          resourceGroupName: ${{ env.AZURE_RESOURCE_GROUP }}
+          template: ./infra/api-onboarding.json
+          parameters: >
+            apimServiceName=${{ needs.deploy-main.outputs.apimServiceName }}
+            backendWebAppUrl=https://${{ needs.deploy-main.outputs.webAppHostName }}
+            openApiSpecUrl=https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/apim/openapi.yaml
+          deploymentName: defender-apis-onboarding-${{ github.run_number }}
+          failOnStdErr: false
+
+  deploy-pricing:
+    name: (Optional) Enable Defender plans at subscription scope
+    needs: deploy-main
+    if: ${{ github.event.inputs.enableDefenderPlans == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy pricing.json (subscription scope)
+        uses: azure/arm-deploy@v2
+        with:
+          scope: subscription
+          region: ${{ env.AZURE_LOCATION }}
+          template: ./infra/pricing.json
+          parameters: >
+            enableDefenderForApis=true
+            enableDefenderCspm=true
+          deploymentName: defender-apis-pricing-${{ github.run_number }}
+          failOnStdErr: false

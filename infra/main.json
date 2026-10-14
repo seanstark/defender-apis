@@ -1,0 +1,200 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "description": "Defender for Cloud / Defender for APIs demo environment. Deploys a Node.js mock retail API (App Service), publishes it through Azure API Management, and stands up a Static Web App to host the synthetic traffic-generator website. Run infra/api-onboarding.json afterwards to import the OpenAPI definition into APIM and onboard the API into Defender for APIs, and infra/pricing.json (subscription scope) to enable the required Defender plans."
+  },
+  "parameters": {
+    "namePrefix": {
+      "type": "string",
+      "defaultValue": "dfapi",
+      "maxLength": 12,
+      "metadata": { "description": "Short prefix (lowercase alphanumeric) used to derive all resource names." }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": { "description": "Location for most resources (App Service, APIM, Log Analytics, App Insights)." }
+    },
+    "staticSiteLocation": {
+      "type": "string",
+      "defaultValue": "eastus2",
+      "allowedValues": [ "centralus", "eastus2", "westus2", "westeurope", "eastasia" ],
+      "metadata": { "description": "Azure Static Web Apps is only available in a subset of regions; choose the closest one." }
+    },
+    "apimPublisherEmail": {
+      "type": "string",
+      "metadata": { "description": "Email address used for API Management developer-portal notifications." }
+    },
+    "apimPublisherName": {
+      "type": "string",
+      "defaultValue": "Defender for APIs Demo",
+      "metadata": { "description": "Organization name shown in the API Management developer portal." }
+    },
+    "apimSku": {
+      "type": "string",
+      "defaultValue": "Developer",
+      "allowedValues": [ "Developer" ],
+      "metadata": { "description": "API Management SKU. Developer tier is used for this demo (not for production workloads)." }
+    },
+    "appServicePlanSku": {
+      "type": "string",
+      "defaultValue": "B1",
+      "metadata": { "description": "Linux App Service Plan SKU hosting the Node.js mock API." }
+    },
+    "nodeVersion": {
+      "type": "string",
+      "defaultValue": "18-lts",
+      "metadata": { "description": "Node.js runtime version tag used for the Linux Web App (NODE|<value>)." }
+    }
+  },
+  "variables": {
+    "uniqueSuffix": "[toLower(uniqueString(resourceGroup().id))]",
+    "logAnalyticsName": "[format('{0}-law-{1}', parameters('namePrefix'), variables('uniqueSuffix'))]",
+    "appInsightsName": "[format('{0}-appi-{1}', parameters('namePrefix'), variables('uniqueSuffix'))]",
+    "appServicePlanName": "[format('{0}-plan-{1}', parameters('namePrefix'), variables('uniqueSuffix'))]",
+    "webAppName": "[format('{0}-api-{1}', parameters('namePrefix'), variables('uniqueSuffix'))]",
+    "staticSiteName": "[format('{0}-site-{1}', parameters('namePrefix'), variables('uniqueSuffix'))]",
+    "apimServiceName": "[format('{0}-apim-{1}', parameters('namePrefix'), variables('uniqueSuffix'))]",
+    "apimLoggerName": "appinsights-logger"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.OperationalInsights/workspaces",
+      "apiVersion": "2022-10-01",
+      "name": "[variables('logAnalyticsName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "sku": { "name": "PerGB2018" },
+        "retentionInDays": 30
+      }
+    },
+    {
+      "type": "Microsoft.Insights/components",
+      "apiVersion": "2020-02-02",
+      "name": "[variables('appInsightsName')]",
+      "location": "[parameters('location')]",
+      "kind": "web",
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]"
+      ],
+      "properties": {
+        "Application_Type": "web",
+        "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]"
+      }
+    },
+    {
+      "type": "Microsoft.Web/serverfarms",
+      "apiVersion": "2023-12-01",
+      "name": "[variables('appServicePlanName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "[parameters('appServicePlanSku')]"
+      },
+      "kind": "linux",
+      "properties": {
+        "reserved": true
+      }
+    },
+    {
+      "type": "Microsoft.Web/sites",
+      "apiVersion": "2023-12-01",
+      "name": "[variables('webAppName')]",
+      "location": "[parameters('location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]",
+        "[resourceId('Microsoft.Insights/components', variables('appInsightsName'))]"
+      ],
+      "properties": {
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]",
+        "httpsOnly": true,
+        "siteConfig": {
+          "linuxFxVersion": "[format('NODE|{0}', parameters('nodeVersion'))]",
+          "alwaysOn": false,
+          "appCommandLine": "npm start",
+          "appSettings": [
+            { "name": "WEBSITE_NODE_DEFAULT_VERSION", "value": "[parameters('nodeVersion')]" },
+            { "name": "SCM_DO_BUILD_DURING_DEPLOYMENT", "value": "true" },
+            { "name": "APPLICATIONINSIGHTS_CONNECTION_STRING", "value": "[reference(resourceId('Microsoft.Insights/components', variables('appInsightsName')), '2020-02-02').ConnectionString]" }
+          ]
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Web/staticSites",
+      "apiVersion": "2023-12-01",
+      "name": "[variables('staticSiteName')]",
+      "location": "[parameters('staticSiteLocation')]",
+      "sku": {
+        "name": "Free",
+        "tier": "Free"
+      },
+      "properties": {
+        "buildProperties": {
+          "skipGithubActionWorkflowGeneration": true
+        }
+      },
+      "metadata": {
+        "description": "Content is deployed separately via the website-deploy.yml GitHub Actions workflow using the Azure/static-web-apps-deploy action, so no repositoryUrl/branch is configured here."
+      }
+    },
+    {
+      "type": "Microsoft.ApiManagement/service",
+      "apiVersion": "2022-08-01",
+      "name": "[variables('apimServiceName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "[parameters('apimSku')]",
+        "capacity": 1
+      },
+      "properties": {
+        "publisherEmail": "[parameters('apimPublisherEmail')]",
+        "publisherName": "[parameters('apimPublisherName')]"
+      }
+    },
+    {
+      "type": "Microsoft.ApiManagement/service/loggers",
+      "apiVersion": "2022-08-01",
+      "name": "[format('{0}/{1}', variables('apimServiceName'), variables('apimLoggerName'))]",
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service', variables('apimServiceName'))]",
+        "[resourceId('Microsoft.Insights/components', variables('appInsightsName'))]"
+      ],
+      "properties": {
+        "loggerType": "applicationInsights",
+        "resourceId": "[resourceId('Microsoft.Insights/components', variables('appInsightsName'))]",
+        "credentials": {
+          "instrumentationKey": "[reference(resourceId('Microsoft.Insights/components', variables('appInsightsName')), '2020-02-02').InstrumentationKey]"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.ApiManagement/service/diagnostics",
+      "apiVersion": "2022-08-01",
+      "name": "[format('{0}/applicationinsights', variables('apimServiceName'))]",
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service/loggers', variables('apimServiceName'), variables('apimLoggerName'))]"
+      ],
+      "properties": {
+        "alwaysLog": "allErrors",
+        "loggerId": "[resourceId('Microsoft.ApiManagement/service/loggers', variables('apimServiceName'), variables('apimLoggerName'))]",
+        "sampling": {
+          "samplingType": "fixed",
+          "percentage": 100
+        },
+        "verbosity": "information",
+        "logClientIp": true
+      }
+    }
+  ],
+  "outputs": {
+    "logAnalyticsWorkspaceName": { "type": "string", "value": "[variables('logAnalyticsName')]" },
+    "appInsightsName": { "type": "string", "value": "[variables('appInsightsName')]" },
+    "webAppName": { "type": "string", "value": "[variables('webAppName')]" },
+    "webAppHostName": { "type": "string", "value": "[reference(resourceId('Microsoft.Web/sites', variables('webAppName'))).defaultHostName]" },
+    "staticSiteName": { "type": "string", "value": "[variables('staticSiteName')]" },
+    "staticSiteDefaultHostname": { "type": "string", "value": "[reference(resourceId('Microsoft.Web/staticSites', variables('staticSiteName'))).defaultHostname]" },
+    "apimServiceName": { "type": "string", "value": "[variables('apimServiceName')]" },
+    "apimGatewayUrl": { "type": "string", "value": "[reference(resourceId('Microsoft.ApiManagement/service', variables('apimServiceName'))).gatewayUrl]" }
+  }
+}
