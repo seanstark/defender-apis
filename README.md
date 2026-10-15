@@ -56,7 +56,7 @@ Reference documentation used to design this environment:
 |---|---|
 | [api/](./api) | Node.js/Express mock retail API with synthetic PII/PCI-shaped data, intentionally "noisy"/insecure endpoints (admin dumps, SSRF-shaped tool, oversized payload endpoints, parameter-driven filters) designed to trip specific Defender for APIs alert types. |
 | [apim/openapi.yaml](./apim/openapi.yaml) | OpenAPI 3.0.3 definition of all 15 endpoints, imported into API Management. This is also the artifact Defender for APIs uses to understand the API's schema (used for sensitive-data and schema-violation detections). |
-| [infra/](./infra) | ARM templates: one-click master deployment, core infra, API onboarding, and optional subscription-level Defender plan enablement. |
+| [infra/](./infra) | ARM templates: one-click master deployment, core infra, API onboarding, application-content publishing, and optional subscription-level Defender plan enablement. |
 | [website/](./website) | Static HTML/CSS/JS "synthetic traffic generator" — a control panel for firing the scenarios that map to each Defender for APIs alert type. |
 | [.github/workflows/](./.github/workflows) | GitHub Actions: infra deploy, website deploy, backend CI, and the MSDO DevOps-security scan. |
 | [docs/](./docs) | Deeper how-to guides referenced below. |
@@ -87,20 +87,21 @@ deployment it:
 2. Deploys the core Azure infrastructure from `infra/main.json`.
 3. Imports the public OpenAPI document into API Management and onboards the API into Defender for
    APIs using `infra/api-onboarding.json`.
-4. Optionally enables the paid Defender for APIs and Defender CSPM plans using
+4. ZIP-deploys the Node.js API and publishes the preconfigured traffic-generator website to Azure
+   Static Web Apps using `infra/content-deployment.json`.
+5. Optionally enables the paid Defender for APIs and Defender CSPM plans using
    `infra/pricing.json`. The `enableDefenderPlans` parameter defaults to `false` to avoid enabling
    billable plans without an explicit choice.
 
 The account running the deployment needs permission to create resource groups and resources at the
-subscription scope. Enabling the Defender plans also requires the appropriate subscription-level
-security/pricing permissions.
+subscription scope. Application-content publishing creates a user-assigned managed identity and a
+resource-group-scoped Contributor role assignment for the ARM deployment script, so the deploying
+account must also be able to create role assignments (for example, Owner or User Access
+Administrator plus Contributor). Enabling the Defender plans requires the appropriate
+subscription-level security/pricing permissions.
 
-> The master ARM template provisions and configures all Azure resources, but ARM cannot publish
-> this repository's application files to the provisioned hosts. After it succeeds, run
-> **Deploy Infrastructure (ARM)** to zip-deploy the Node.js backend, or deploy the `api/` folder
-> with `az webapp deploy`. Then run **Deploy Website (Azure Static Web Apps)** to publish the
-> `website/` folder. The API is already configured in APIM and starts forwarding successfully as
-> soon as the backend code is present.
+The `deployApplicationContent` parameter defaults to `true`. Set it to `false` only when you want
+to provision the hosts without publishing the backend and website.
 
 ### Option A — Azure CLI
 

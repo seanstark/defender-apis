@@ -111,7 +111,6 @@
         "siteConfig": {
           "linuxFxVersion": "[format('NODE|{0}', parameters('nodeVersion'))]",
           "alwaysOn": false,
-          "appCommandLine": "npm start",
           "appSettings": [
             { "name": "WEBSITE_NODE_DEFAULT_VERSION", "value": "[parameters('nodeVersion')]" },
             { "name": "SCM_DO_BUILD_DURING_DEPLOYMENT", "value": "true" },

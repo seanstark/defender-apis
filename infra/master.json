@@ -89,6 +89,20 @@
         "description": "Enable the paid Defender for APIs P1 and Defender CSPM plans. Leave false if the plans are already enabled or you want to enable them separately."
       }
     },
+    "deployApplicationContent": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Publish the Node.js API and Static Web App content as part of this deployment."
+      }
+    },
+    "sourceArchiveUrl": {
+      "type": "string",
+      "defaultValue": "https://github.com/seanstark/defender-apis/archive/refs/heads/main.zip",
+      "metadata": {
+        "description": "Public ZIP archive containing the api and website folders."
+      }
+    },
     "_artifactsLocation": {
       "type": "string",
       "defaultValue": "https://raw.githubusercontent.com/seanstark/defender-apis/main/",
@@ -216,6 +230,46 @@
           }
         }
       }
+    },
+    {
+      "condition": "[parameters('deployApplicationContent')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "applicationContent",
+      "resourceGroup": "[parameters('resourceGroupName')]",
+      "dependsOn": [
+        "apiOnboarding"
+      ],
+      "properties": {
+        "mode": "Incremental",
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "templateLink": {
+          "uri": "[uri(parameters('_artifactsLocation'), 'infra/content-deployment.json')]",
+          "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "webAppName": {
+            "value": "[reference('coreInfrastructure').outputs.webAppName.value]"
+          },
+          "staticSiteName": {
+            "value": "[reference('coreInfrastructure').outputs.staticSiteName.value]"
+          },
+          "apiGatewayUrl": {
+            "value": "[format('{0}/{1}', reference('coreInfrastructure').outputs.apimGatewayUrl.value, parameters('apiPath'))]"
+          },
+          "sourceArchiveUrl": {
+            "value": "[parameters('sourceArchiveUrl')]"
+          },
+          "forceUpdateTag": {
+            "value": "[deployment().name]"
+          }
+        }
+      }
     }
   ],
   "outputs": {
@@ -254,6 +308,10 @@
     "defenderPlansRequested": {
       "type": "bool",
       "value": "[parameters('enableDefenderPlans')]"
+    },
+    "applicationContentRequested": {
+      "type": "bool",
+      "value": "[parameters('deployApplicationContent')]"
     }
   }
 }

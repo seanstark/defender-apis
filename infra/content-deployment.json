@@ -1,0 +1,134 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "description": "Publishes the Node.js API and synthetic traffic-generator website after the hosting resources have been provisioned. Uses an ARM deployment script with a temporary user-assigned managed identity."
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Location for the deployment script and its managed identity."
+      }
+    },
+    "webAppName": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of the App Service Web App that receives the Node.js API package."
+      }
+    },
+    "staticSiteName": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of the Azure Static Web App that receives the website content."
+      }
+    },
+    "apiGatewayUrl": {
+      "type": "string",
+      "metadata": {
+        "description": "Full APIM URL, including the API path, injected into website/assets/config.js."
+      }
+    },
+    "sourceArchiveUrl": {
+      "type": "string",
+      "defaultValue": "https://github.com/seanstark/defender-apis/archive/refs/heads/main.zip",
+      "metadata": {
+        "description": "Public ZIP archive containing the api and website folders."
+      }
+    },
+    "forceUpdateTag": {
+      "type": "string",
+      "defaultValue": "1",
+      "metadata": {
+        "description": "Change this value to force the deployment script to publish the application content again."
+      }
+    }
+  },
+  "variables": {
+    "identityName": "[format('defender-apis-deploy-{0}', uniqueString(resourceGroup().id))]",
+    "contributorRoleId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b24988ac-6180-42a0-ab88-20f7382dd24c')]",
+    "roleAssignmentName": "[guid(resourceGroup().id, variables('identityName'), variables('contributorRoleId'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+      "apiVersion": "2023-01-31",
+      "name": "[variables('identityName')]",
+      "location": "[parameters('location')]"
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "name": "[variables('roleAssignmentName')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))]"
+      ],
+      "properties": {
+        "roleDefinitionId": "[variables('contributorRoleId')]",
+        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName')), '2023-01-31').principalId]",
+        "principalType": "ServicePrincipal"
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deploymentScripts",
+      "apiVersion": "2023-08-01",
+      "name": "publishDefenderApisApplication",
+      "location": "[parameters('location')]",
+      "kind": "AzureCLI",
+      "identity": {
+        "type": "UserAssigned",
+        "userAssignedIdentities": {
+          "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))]": {}
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Authorization/roleAssignments', variables('roleAssignmentName'))]"
+      ],
+      "properties": {
+        "azCliVersion": "2.74.0",
+        "timeout": "PT45M",
+        "cleanupPreference": "OnSuccess",
+        "retentionInterval": "P1D",
+        "forceUpdateTag": "[parameters('forceUpdateTag')]",
+        "environmentVariables": [
+          {
+            "name": "TARGET_RESOURCE_GROUP",
+            "value": "[resourceGroup().name]"
+          },
+          {
+            "name": "TARGET_WEB_APP",
+            "value": "[parameters('webAppName')]"
+          },
+          {
+            "name": "TARGET_STATIC_SITE",
+            "value": "[parameters('staticSiteName')]"
+          },
+          {
+            "name": "API_GATEWAY_URL",
+            "value": "[parameters('apiGatewayUrl')]"
+          },
+          {
+            "name": "SOURCE_ARCHIVE_URL",
+            "value": "[parameters('sourceArchiveUrl')]"
+          }
+        ],
+        "scriptContent": "set -euo pipefail\n\nwork_dir=\"$(mktemp -d)\"\ntrap 'rm -rf \"$work_dir\"' EXIT\ncd \"$work_dir\"\n\ncurl --fail --silent --show-error --location \"$SOURCE_ARCHIVE_URL\" --output source.zip\npython3 -m zipfile -e source.zip source\nsource_root=\"$(find source -mindepth 1 -maxdepth 1 -type d | head -n 1)\"\nif [ -z \"$source_root\" ]; then\n  echo \"The source archive did not contain a repository directory.\" >&2\n  exit 1\nfi\n\ncd \"$source_root/api\"\npython3 -m zipfile -c \"$work_dir/api-release.zip\" package.json package-lock.json src\n\nfor attempt in 1 2 3 4 5 6; do\n  if az webapp deploy --resource-group \"$TARGET_RESOURCE_GROUP\" --name \"$TARGET_WEB_APP\" --src-path \"$work_dir/api-release.zip\" --type zip --clean true --restart true --timeout 600000 --only-show-errors; then\n    break\n  fi\n  if [ \"$attempt\" = \"6\" ]; then\n    echo \"The API package could not be deployed after 6 attempts.\" >&2\n    exit 1\n  fi\n  sleep 20\ndone\n\ncd \"$work_dir/$source_root/website\" 2>/dev/null || cd \"$OLDPWD/../website\"\nprintf \"window.DEFAULT_API_BASE_URL = window.DEFAULT_API_BASE_URL || '%s';\\n\" \"$API_GATEWAY_URL\" > assets/config.js\n\nnode_version=\"20.18.0\"\ncurl --fail --silent --show-error --location \"https://nodejs.org/dist/v${node_version}/node-v${node_version}-linux-x64.tar.gz\" --output \"$work_dir/node.tar.gz\"\npython3 -c \"import tarfile, warnings; warnings.simplefilter('ignore', DeprecationWarning); tarfile.open('$work_dir/node.tar.gz', 'r:gz').extractall('$work_dir')\"\nexport PATH=\"$work_dir/node-v${node_version}-linux-x64/bin:$PATH\"\nexport npm_config_cache=\"$work_dir/npm-cache\"\nexport DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1\n\nstatic_site_token=\"\"\nfor attempt in 1 2 3 4 5 6; do\n  static_site_token=\"$(az staticwebapp secrets list --resource-group \"$TARGET_RESOURCE_GROUP\" --name \"$TARGET_STATIC_SITE\" --query properties.apiKey --output tsv 2>/dev/null || true)\"\n  if [ -n \"$static_site_token\" ]; then\n    break\n  fi\n  sleep 20\ndone\nif [ -z \"$static_site_token\" ]; then\n  echo \"Unable to retrieve the Static Web App deployment token.\" >&2\n  exit 1\nfi\n\nSWA_CLI_DEPLOYMENT_TOKEN=\"$static_site_token\" npx --yes @azure/static-web-apps-cli@2.0.10 deploy . --env production 2>&1\nunset static_site_token SWA_CLI_DEPLOYMENT_TOKEN\n\necho '{\"backendPublished\":true,\"websitePublished\":true}' > \"$AZ_SCRIPTS_OUTPUT_PATH\"\n"
+      }
+    }
+  ],
+  "outputs": {
+    "contentDeploymentIdentityName": {
+      "type": "string",
+      "value": "[variables('identityName')]"
+    },
+    "backendPublished": {
+      "type": "bool",
+      "value": "[reference('publishDefenderApisApplication').outputs.backendPublished]"
+    },
+    "websitePublished": {
+      "type": "bool",
+      "value": "[reference('publishDefenderApisApplication').outputs.websitePublished]"
+    }
+  }
+}
