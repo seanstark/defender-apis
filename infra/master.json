@@ -103,6 +103,13 @@
         "description": "Public ZIP archive containing the api and website folders."
       }
     },
+    "contentDeploymentTag": {
+      "type": "string",
+      "defaultValue": "[utcNow()]",
+      "metadata": {
+        "description": "Automatically changes for each master deployment so application content is republished."
+      }
+    },
     "_artifactsLocation": {
       "type": "string",
       "defaultValue": "https://raw.githubusercontent.com/seanstark/defender-apis/main/",
@@ -266,7 +273,7 @@
             "value": "[parameters('sourceArchiveUrl')]"
           },
           "forceUpdateTag": {
-            "value": "[deployment().name]"
+            "value": "[parameters('contentDeploymentTag')]"
           }
         }
       }

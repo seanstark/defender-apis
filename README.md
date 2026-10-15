@@ -98,7 +98,8 @@ subscription scope. Application-content publishing creates a user-assigned manag
 resource-group-scoped Contributor role assignment for the ARM deployment script, so the deploying
 account must also be able to create role assignments (for example, Owner or User Access
 Administrator plus Contributor). Enabling the Defender plans requires the appropriate
-subscription-level security/pricing permissions.
+subscription-level security/pricing permissions. The identity remains in the resource group so
+the content stage can run again on later master-template deployments.
 
 The `deployApplicationContent` parameter defaults to `true`. Set it to `false` only when you want
 to provision the hosts without publishing the backend and website.
