@@ -8,44 +8,90 @@ straight to [Step 3](#step-3-first-deployment).
 ## Step 1 — Create the App Registration + federated credential
 
 Run these with an account that has permission to create App Registrations in Entra ID and assign
-roles on the target subscription.
+roles on the target subscription. The block below is formatted for **PowerShell**. Update the two
+values in the **Edit these values** section, then copy and paste the entire block into a PowerShell
+terminal.
 
 ```powershell
-# Variables — adjust as needed
-$appName   = "defender-apis-demo-gha"
-$repo      = "<your-org>/<your-repo>"   # e.g. contoso/defender-apis
-$subId     = az account show --query id -o tsv
+# ---------------------------------------------------------------------------
+# Edit these values
+# ---------------------------------------------------------------------------
+$appName = "defender-apis-demo-gha"
+$repo = "your-github-org/your-repository"
 
-# 1. Create the app registration + service principal
-$appId = az ad app create --display-name $appName --query appId -o tsv
+# ---------------------------------------------------------------------------
+# Sign in and select the target Azure subscription
+# ---------------------------------------------------------------------------
+az login
+
+# If you have access to multiple subscriptions, uncomment and set this value:
+# az account set --subscription "00000000-0000-0000-0000-000000000000"
+
+$subscriptionId = az account show --query id --output tsv
+$tenantId = az account show --query tenantId --output tsv
+
+# ---------------------------------------------------------------------------
+# Create the Entra ID app registration and service principal
+# ---------------------------------------------------------------------------
+$appId = az ad app create `
+  --display-name $appName `
+  --query appId `
+  --output tsv
+
 az ad sp create --id $appId | Out-Null
 
-# 2. Federated credential scoped to the main branch
-az ad app federated-credential create --id $appId --parameters (@{
+# ---------------------------------------------------------------------------
+# Add a GitHub OIDC federated credential scoped to the main branch
+# ---------------------------------------------------------------------------
+$federatedCredential = @{
   name        = "github-main-branch"
   issuer      = "https://token.actions.githubusercontent.com"
-  subject     = "repo:$repo:ref:refs/heads/main"
+  subject     = "repo:${repo}:ref:refs/heads/main"
   audiences   = @("api://AzureADTokenExchange")
-} | ConvertTo-Json -Compress)
+} | ConvertTo-Json -Compress
 
-# Optional: also allow manual workflow_dispatch runs from other branches/environments, e.g.:
-# subject = "repo:$repo:environment:production"
+$federatedCredentialFile = Join-Path $env:TEMP "defender-apis-federated-credential.json"
+[System.IO.File]::WriteAllText(
+  $federatedCredentialFile,
+  $federatedCredential,
+  [System.Text.UTF8Encoding]::new($false)
+)
 
-# 3. Grant Contributor on the subscription (or scope to a specific resource group you pre-create)
+try {
+  az ad app federated-credential create `
+    --id $appId `
+    --parameters $federatedCredentialFile
+}
+finally {
+  Remove-Item $federatedCredentialFile -Force -ErrorAction SilentlyContinue
+}
+
+# ---------------------------------------------------------------------------
+# Grant Contributor on the selected subscription
+# ---------------------------------------------------------------------------
 az role assignment create `
   --assignee $appId `
-  --role Contributor `
-  --scope "/subscriptions/$subId"
+  --role "Contributor" `
+  --scope "/subscriptions/$subscriptionId"
 
-# 4. Note these three values for GitHub secrets
-az ad app show --id $appId --query appId -o tsv          # -> AZURE_CLIENT_ID
-az account show --query tenantId -o tsv                   # -> AZURE_TENANT_ID
-az account show --query id -o tsv                          # -> AZURE_SUBSCRIPTION_ID
+# ---------------------------------------------------------------------------
+# Print the values to add as GitHub Actions secrets
+# ---------------------------------------------------------------------------
+Write-Host ""
+Write-Host "Add these values under GitHub repository Settings > Secrets and variables > Actions:"
+Write-Host "AZURE_CLIENT_ID=$appId"
+Write-Host "AZURE_TENANT_ID=$tenantId"
+Write-Host "AZURE_SUBSCRIPTION_ID=$subscriptionId"
 ```
+
+The federated credential above trusts workflows running from the repository's `main` branch. If
+the deployment job uses a GitHub environment instead, change `subject` to
+`"repo:${repo}:environment:production"` and replace `production` with the environment name.
 
 > Scoping Contributor to a pre-created resource group instead of the whole subscription is more
 > conservative — just change `--scope` to
-> `/subscriptions/$subId/resourceGroups/rg-defender-apis-demo` and create that group first. Note
+> `/subscriptions/$subscriptionId/resourceGroups/rg-defender-apis-demo` and create that group
+> first. Note
 > that `infra/pricing.json` deploys at **subscription** scope, so if you scope role assignment to a
 > resource group, that optional step will need separate elevated credentials or to be run manually.
 

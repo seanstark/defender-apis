@@ -56,7 +56,7 @@ Reference documentation used to design this environment:
 |---|---|
 | [api/](./api) | Node.js/Express mock retail API with synthetic PII/PCI-shaped data, intentionally "noisy"/insecure endpoints (admin dumps, SSRF-shaped tool, oversized payload endpoints, parameter-driven filters) designed to trip specific Defender for APIs alert types. |
 | [apim/openapi.yaml](./apim/openapi.yaml) | OpenAPI 3.0.3 definition of all 15 endpoints, imported into API Management. This is also the artifact Defender for APIs uses to understand the API's schema (used for sensitive-data and schema-violation detections). |
-| [infra/](./infra) | ARM templates: core infra, API-onboarding, and optional subscription-level Defender plan enablement. |
+| [infra/](./infra) | ARM templates: one-click master deployment, core infra, API onboarding, and optional subscription-level Defender plan enablement. |
 | [website/](./website) | Static HTML/CSS/JS "synthetic traffic generator" — a control panel for firing the scenarios that map to each Defender for APIs alert type. |
 | [.github/workflows/](./.github/workflows) | GitHub Actions: infra deploy, website deploy, backend CI, and the MSDO DevOps-security scan. |
 | [docs/](./docs) | Deeper how-to guides referenced below. |
@@ -75,6 +75,32 @@ run the same three ARM templates in the same order:
 4. *(Optional, separate step)* `infra/pricing.json` (**subscription** scope) — enables the
    `Api` (Defender for APIs) and `CloudPosture` (Defender CSPM) plans if they are not already on in
    the target subscription.
+
+### One-click Azure deployment
+
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fseanstark%2Fdefender-apis%2Fmain%2Finfra%2Fmaster.json)
+
+The button deploys [infra/master.json](./infra/master.json) at subscription scope. In one Azure
+deployment it:
+
+1. Creates or updates the target resource group.
+2. Deploys the core Azure infrastructure from `infra/main.json`.
+3. Imports the public OpenAPI document into API Management and onboards the API into Defender for
+   APIs using `infra/api-onboarding.json`.
+4. Optionally enables the paid Defender for APIs and Defender CSPM plans using
+   `infra/pricing.json`. The `enableDefenderPlans` parameter defaults to `false` to avoid enabling
+   billable plans without an explicit choice.
+
+The account running the deployment needs permission to create resource groups and resources at the
+subscription scope. Enabling the Defender plans also requires the appropriate subscription-level
+security/pricing permissions.
+
+> The master ARM template provisions and configures all Azure resources, but ARM cannot publish
+> this repository's application files to the provisioned hosts. After it succeeds, run
+> **Deploy Infrastructure (ARM)** to zip-deploy the Node.js backend, or deploy the `api/` folder
+> with `az webapp deploy`. Then run **Deploy Website (Azure Static Web Apps)** to publish the
+> `website/` folder. The API is already configured in APIM and starts forwarding successfully as
+> soon as the backend code is present.
 
 ### Option A — Azure CLI
 

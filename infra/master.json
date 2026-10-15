@@ -1,0 +1,259 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "description": "Master subscription-scope deployment for the Defender for APIs demo. Creates the resource group, deploys the core infrastructure, imports and onboards the retail API, and can optionally enable the Defender for APIs and Defender CSPM subscription plans."
+  },
+  "parameters": {
+    "resourceGroupName": {
+      "type": "string",
+      "defaultValue": "rg-defender-apis-demo",
+      "metadata": {
+        "description": "Resource group to create or update for the demo resources."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "eastus2",
+      "metadata": {
+        "description": "Azure region for the resource group, deployment records, and regional resources."
+      }
+    },
+    "staticSiteLocation": {
+      "type": "string",
+      "defaultValue": "eastus2",
+      "allowedValues": [
+        "centralus",
+        "eastus2",
+        "westus2",
+        "westeurope",
+        "eastasia"
+      ],
+      "metadata": {
+        "description": "Azure region for the Static Web App."
+      }
+    },
+    "namePrefix": {
+      "type": "string",
+      "defaultValue": "dfapi",
+      "maxLength": 12,
+      "metadata": {
+        "description": "Short lowercase alphanumeric prefix used to derive resource names."
+      }
+    },
+    "apimPublisherEmail": {
+      "type": "string",
+      "metadata": {
+        "description": "Email address used for API Management developer-portal notifications."
+      }
+    },
+    "apimPublisherName": {
+      "type": "string",
+      "defaultValue": "Defender for APIs Demo",
+      "metadata": {
+        "description": "Organization name shown in the API Management developer portal."
+      }
+    },
+    "appServicePlanSku": {
+      "type": "string",
+      "defaultValue": "B1",
+      "metadata": {
+        "description": "Linux App Service Plan SKU. Use F1 if B1 quota is unavailable."
+      }
+    },
+    "nodeVersion": {
+      "type": "string",
+      "defaultValue": "18-lts",
+      "metadata": {
+        "description": "Node.js runtime version tag for the Linux Web App."
+      }
+    },
+    "apiId": {
+      "type": "string",
+      "defaultValue": "retail",
+      "metadata": {
+        "description": "Logical API identifier in API Management."
+      }
+    },
+    "apiPath": {
+      "type": "string",
+      "defaultValue": "retail",
+      "metadata": {
+        "description": "URL suffix used to publish the API through the API Management gateway."
+      }
+    },
+    "enableDefenderPlans": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Enable the paid Defender for APIs P1 and Defender CSPM plans. Leave false if the plans are already enabled or you want to enable them separately."
+      }
+    },
+    "_artifactsLocation": {
+      "type": "string",
+      "defaultValue": "https://raw.githubusercontent.com/seanstark/defender-apis/main/",
+      "metadata": {
+        "description": "Public base URI containing the linked templates and OpenAPI document. Include a trailing slash."
+      }
+    },
+    "openApiSpecUrl": {
+      "type": "string",
+      "defaultValue": "[uri(parameters('_artifactsLocation'), 'apim/openapi.yaml')]",
+      "metadata": {
+        "description": "Publicly reachable URL for the OpenAPI document imported into API Management."
+      }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Resources/resourceGroups",
+      "apiVersion": "2022-09-01",
+      "name": "[parameters('resourceGroupName')]",
+      "location": "[parameters('location')]"
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "coreInfrastructure",
+      "resourceGroup": "[parameters('resourceGroupName')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/resourceGroups', parameters('resourceGroupName'))]"
+      ],
+      "properties": {
+        "mode": "Incremental",
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "templateLink": {
+          "uri": "[uri(parameters('_artifactsLocation'), 'infra/main.json')]",
+          "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+          "namePrefix": {
+            "value": "[parameters('namePrefix')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "staticSiteLocation": {
+            "value": "[parameters('staticSiteLocation')]"
+          },
+          "apimPublisherEmail": {
+            "value": "[parameters('apimPublisherEmail')]"
+          },
+          "apimPublisherName": {
+            "value": "[parameters('apimPublisherName')]"
+          },
+          "apimSku": {
+            "value": "Developer"
+          },
+          "appServicePlanSku": {
+            "value": "[parameters('appServicePlanSku')]"
+          },
+          "nodeVersion": {
+            "value": "[parameters('nodeVersion')]"
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "apiOnboarding",
+      "resourceGroup": "[parameters('resourceGroupName')]",
+      "dependsOn": [
+        "coreInfrastructure"
+      ],
+      "properties": {
+        "mode": "Incremental",
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "templateLink": {
+          "uri": "[uri(parameters('_artifactsLocation'), 'infra/api-onboarding.json')]",
+          "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+          "apimServiceName": {
+            "value": "[reference('coreInfrastructure').outputs.apimServiceName.value]"
+          },
+          "backendWebAppUrl": {
+            "value": "[format('https://{0}', reference('coreInfrastructure').outputs.webAppHostName.value)]"
+          },
+          "openApiSpecUrl": {
+            "value": "[parameters('openApiSpecUrl')]"
+          },
+          "apiId": {
+            "value": "[parameters('apiId')]"
+          },
+          "apiPath": {
+            "value": "[parameters('apiPath')]"
+          }
+        }
+      }
+    },
+    {
+      "condition": "[parameters('enableDefenderPlans')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "defenderPlans",
+      "location": "[parameters('location')]",
+      "properties": {
+        "mode": "Incremental",
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "templateLink": {
+          "uri": "[uri(parameters('_artifactsLocation'), 'infra/pricing.json')]",
+          "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+          "enableDefenderForApis": {
+            "value": true
+          },
+          "enableDefenderCspm": {
+            "value": true
+          }
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "resourceGroupName": {
+      "type": "string",
+      "value": "[parameters('resourceGroupName')]"
+    },
+    "webAppName": {
+      "type": "string",
+      "value": "[reference('coreInfrastructure').outputs.webAppName.value]"
+    },
+    "webAppHostName": {
+      "type": "string",
+      "value": "[reference('coreInfrastructure').outputs.webAppHostName.value]"
+    },
+    "staticSiteName": {
+      "type": "string",
+      "value": "[reference('coreInfrastructure').outputs.staticSiteName.value]"
+    },
+    "staticSiteDefaultHostname": {
+      "type": "string",
+      "value": "[reference('coreInfrastructure').outputs.staticSiteDefaultHostname.value]"
+    },
+    "apimServiceName": {
+      "type": "string",
+      "value": "[reference('coreInfrastructure').outputs.apimServiceName.value]"
+    },
+    "apimGatewayUrl": {
+      "type": "string",
+      "value": "[reference('coreInfrastructure').outputs.apimGatewayUrl.value]"
+    },
+    "apiGatewayUrl": {
+      "type": "string",
+      "value": "[format('{0}/{1}', reference('coreInfrastructure').outputs.apimGatewayUrl.value, parameters('apiPath'))]"
+    },
+    "defenderPlansRequested": {
+      "type": "bool",
+      "value": "[parameters('enableDefenderPlans')]"
+    }
+  }
+}
