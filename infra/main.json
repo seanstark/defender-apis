@@ -46,6 +46,21 @@
       "type": "string",
       "defaultValue": "18-lts",
       "metadata": { "description": "Node.js runtime version tag used for the Linux Web App (NODE|<value>)." }
+    },
+    "enablePublicSensitiveUploadContainer": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": { "description": "Create an intentionally public blob container for synthetic sensitive-file uploads and Defender CSPM attack-path demonstrations. Never upload real data." }
+    },
+    "enableControlledCanaryTests": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": { "description": "Enable scoped canary actions: ephemeral synthetic privilege changes, synthetic secret/file reads, fixed sandboxed code execution, and a callback restricted to this demo's APIM endpoint." }
+    },
+    "enableAutomatedBaselineTraffic": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": { "description": "Keep the Web App active and send one normal request per minute through APIM to build Defender for APIs anomaly baselines over time." }
     }
   },
   "variables": {
@@ -56,7 +71,11 @@
     "webAppName": "[format('{0}-api-{1}', parameters('namePrefix'), variables('uniqueSuffix'))]",
     "staticSiteName": "[format('{0}-site-{1}', parameters('namePrefix'), variables('uniqueSuffix'))]",
     "apimServiceName": "[format('{0}-apim-{1}', parameters('namePrefix'), variables('uniqueSuffix'))]",
-    "apimLoggerName": "appinsights-logger"
+    "apimLoggerName": "appinsights-logger",
+    "storageAccountName": "[take(toLower(replace(format('{0}st{1}', parameters('namePrefix'), variables('uniqueSuffix')), '-', '')), 24)]",
+    "sensitiveUploadContainerName": "sensitive-uploads",
+    "storageBlobDataContributorRoleId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')]",
+    "storageRoleAssignmentName": "[guid(resourceGroup().id, variables('webAppName'), variables('storageAccountName'), variables('storageBlobDataContributorRoleId'))]"
   },
   "resources": [
     {
@@ -101,6 +120,9 @@
       "apiVersion": "2023-12-01",
       "name": "[variables('webAppName')]",
       "location": "[parameters('location')]",
+      "identity": {
+        "type": "SystemAssigned"
+      },
       "dependsOn": [
         "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]",
         "[resourceId('Microsoft.Insights/components', variables('appInsightsName'))]"
@@ -110,13 +132,86 @@
         "httpsOnly": true,
         "siteConfig": {
           "linuxFxVersion": "[format('NODE|{0}', parameters('nodeVersion'))]",
-          "alwaysOn": false,
+          "alwaysOn": "[parameters('enableAutomatedBaselineTraffic')]",
           "appSettings": [
             { "name": "WEBSITE_NODE_DEFAULT_VERSION", "value": "[parameters('nodeVersion')]" },
-            { "name": "SCM_DO_BUILD_DURING_DEPLOYMENT", "value": "true" },
-            { "name": "APPLICATIONINSIGHTS_CONNECTION_STRING", "value": "[reference(resourceId('Microsoft.Insights/components', variables('appInsightsName')), '2020-02-02').ConnectionString]" }
+            { "name": "SCM_DO_BUILD_DURING_DEPLOYMENT", "value": "false" },
+            { "name": "APPLICATIONINSIGHTS_CONNECTION_STRING", "value": "[reference(resourceId('Microsoft.Insights/components', variables('appInsightsName')), '2020-02-02').ConnectionString]" },
+            { "name": "PUBLIC_SENSITIVE_UPLOADS_ENABLED", "value": "[string(parameters('enablePublicSensitiveUploadContainer'))]" },
+            { "name": "AZURE_STORAGE_ACCOUNT_URL", "value": "[format('https://{0}.blob.core.windows.net', variables('storageAccountName'))]" },
+            { "name": "AZURE_STORAGE_CONTAINER_NAME", "value": "[variables('sensitiveUploadContainerName')]" },
+            { "name": "CONTROLLED_CANARY_TESTS_ENABLED", "value": "[string(parameters('enableControlledCanaryTests'))]" },
+            { "name": "AUTOMATED_BASELINE_ENABLED", "value": "[string(parameters('enableAutomatedBaselineTraffic'))]" },
+            { "name": "API_GATEWAY_BASE_URL", "value": "[format('https://{0}.azure-api.net/retail', variables('apimServiceName'))]" },
+            { "name": "DEMO_CANARY_SECRET", "value": "[format('SYNTHETIC-CANARY-{0}-NOT-A-REAL-SECRET', uniqueString(resourceGroup().id, variables('webAppName')))]" },
+            { "name": "DEMO_CALLBACK_TOKEN", "value": "[format('synthetic-callback-{0}', uniqueString(resourceGroup().id, variables('apimServiceName')))]" },
+            { "name": "CONTROLLED_CALLBACK_URL", "value": "[format('https://{0}.azure-api.net/retail/api/security/canary/callback-receiver', variables('apimServiceName'))]" }
           ]
         }
+      }
+    },
+    {
+      "condition": "[parameters('enablePublicSensitiveUploadContainer')]",
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2023-05-01",
+      "name": "[variables('storageAccountName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "Standard_LRS"
+      },
+      "kind": "StorageV2",
+      "properties": {
+        "allowBlobPublicAccess": true,
+        "allowSharedKeyAccess": false,
+        "minimumTlsVersion": "TLS1_2",
+        "supportsHttpsTrafficOnly": true,
+        "publicNetworkAccess": "Enabled",
+        "networkAcls": {
+          "bypass": "AzureServices",
+          "defaultAction": "Allow"
+        }
+      }
+    },
+    {
+      "condition": "[parameters('enablePublicSensitiveUploadContainer')]",
+      "type": "Microsoft.Storage/storageAccounts/blobServices",
+      "apiVersion": "2023-05-01",
+      "name": "[format('{0}/default', variables('storageAccountName'))]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+      ],
+      "properties": {
+        "deleteRetentionPolicy": {
+          "enabled": false
+        }
+      }
+    },
+    {
+      "condition": "[parameters('enablePublicSensitiveUploadContainer')]",
+      "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+      "apiVersion": "2023-05-01",
+      "name": "[format('{0}/default/{1}', variables('storageAccountName'), variables('sensitiveUploadContainerName'))]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts/blobServices', variables('storageAccountName'), 'default')]"
+      ],
+      "properties": {
+        "publicAccess": "Blob"
+      }
+    },
+    {
+      "condition": "[parameters('enablePublicSensitiveUploadContainer')]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[format('Microsoft.Storage/storageAccounts/{0}', variables('storageAccountName'))]",
+      "name": "[variables('storageRoleAssignmentName')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', variables('webAppName'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+      ],
+      "properties": {
+        "roleDefinitionId": "[variables('storageBlobDataContributorRoleId')]",
+        "principalId": "[reference(resourceId('Microsoft.Web/sites', variables('webAppName')), '2023-12-01', 'Full').identity.principalId]",
+        "principalType": "ServicePrincipal"
       }
     },
     {
@@ -194,6 +289,12 @@
     "staticSiteName": { "type": "string", "value": "[variables('staticSiteName')]" },
     "staticSiteDefaultHostname": { "type": "string", "value": "[reference(resourceId('Microsoft.Web/staticSites', variables('staticSiteName'))).defaultHostname]" },
     "apimServiceName": { "type": "string", "value": "[variables('apimServiceName')]" },
-    "apimGatewayUrl": { "type": "string", "value": "[reference(resourceId('Microsoft.ApiManagement/service', variables('apimServiceName'))).gatewayUrl]" }
+    "apimGatewayUrl": { "type": "string", "value": "[reference(resourceId('Microsoft.ApiManagement/service', variables('apimServiceName'))).gatewayUrl]" },
+    "controlledCanaryTestsEnabled": { "type": "bool", "value": "[parameters('enableControlledCanaryTests')]" },
+    "automatedBaselineTrafficEnabled": { "type": "bool", "value": "[parameters('enableAutomatedBaselineTraffic')]" },
+    "sensitiveUploadEnabled": { "type": "bool", "value": "[parameters('enablePublicSensitiveUploadContainer')]" },
+    "sensitiveUploadStorageAccountName": { "type": "string", "value": "[variables('storageAccountName')]" },
+    "sensitiveUploadContainerName": { "type": "string", "value": "[variables('sensitiveUploadContainerName')]" },
+    "sensitiveUploadContainerUrl": { "type": "string", "value": "[format('https://{0}.blob.core.windows.net/{1}', variables('storageAccountName'), variables('sensitiveUploadContainerName'))]" }
   }
 }

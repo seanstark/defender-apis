@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SYNTHETIC TEST DATA ONLY - NOT REAL EMPLOYEES OR CREDENTIALS -->
+<employees classification="Confidential">
+  <employee id="EMP-001">
+    <name>Taylor Demo</name>
+    <email>taylor.demo@example.test</email>
+    <phone>+1-202-555-0110</phone>
+    <socialSecurityNumber>900-56-7890</socialSecurityNumber>
+    <salary currency="USD">145000</salary>
+    <apiKey>sk_test_SYNTHETIC_4f3c2b1a00000000</apiKey>
+  </employee>
+  <employee id="EMP-002">
+    <name>Casey Sample</name>
+    <email>casey.sample@example.test</email>
+    <phone>+1-202-555-0111</phone>
+    <socialSecurityNumber>900-67-8901</socialSecurityNumber>
+    <salary currency="USD">132000</salary>
+    <apiKey>sk_test_SYNTHETIC_8e7d6c5b00000000</apiKey>
+  </employee>
+</employees>

@@ -14,6 +14,11 @@
       "type": "bool",
       "defaultValue": true,
       "metadata": { "description": "Enable Defender Cloud Security Posture Management, required for API security posture (discovery/inventory) findings." }
+    },
+    "enableSensitiveDataDiscovery": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": { "description": "Enable Defender CSPM sensitive-data discovery so storage data sensitivity can enrich recommendations and attack paths." }
     }
   },
   "resources": [
@@ -33,12 +38,19 @@
       "apiVersion": "2024-01-01",
       "name": "CloudPosture",
       "properties": {
-        "pricingTier": "Standard"
+        "pricingTier": "Standard",
+        "extensions": [
+          {
+            "name": "SensitiveDataDiscovery",
+            "isEnabled": "[if(parameters('enableSensitiveDataDiscovery'), 'True', 'False')]"
+          }
+        ]
       }
     }
   ],
   "outputs": {
     "defenderForApisEnabled": { "type": "bool", "value": "[parameters('enableDefenderForApis')]" },
-    "defenderCspmEnabled": { "type": "bool", "value": "[parameters('enableDefenderCspm')]" }
+    "defenderCspmEnabled": { "type": "bool", "value": "[parameters('enableDefenderCspm')]" },
+    "sensitiveDataDiscoveryEnabled": { "type": "bool", "value": "[and(parameters('enableDefenderCspm'), parameters('enableSensitiveDataDiscovery'))]" }
   }
 }

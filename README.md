@@ -7,6 +7,9 @@ for Cloud's API security capabilities**:
   exposed APIs (no Defender plan required).
 - **Defender for APIs** — runtime threat detection for APIs published through Azure API Management
   (requires the `Api` Defender plan).
+- **Defender CSPM attack-path analysis** — an optional, intentionally public Blob container receives
+  synthetic sensitive files through the API so sensitive-data discovery can correlate data
+  exposure with the App Service workload.
 - **GitHub DevOps security integration** — IaC/code scanning via the Microsoft Security DevOps
   (MSDO) GitHub Action, surfaced in GitHub's Security tab and, once connected, in Defender for
   Cloud's DevOps Security pane.
@@ -21,6 +24,9 @@ Reference documentation used to design this environment:
 - [GitHub Action for Defender for Cloud](https://learn.microsoft.com/en-us/azure/defender-for-cloud/github-action)
 - [IaC template mapping](https://learn.microsoft.com/en-us/azure/defender-for-cloud/iac-template-mapping)
 - [Defender for APIs alerts reference](https://learn.microsoft.com/en-us/azure/defender-for-cloud/alerts-defender-for-apis)
+- [OWASP API Security Top 10 2023](https://api-security.owasp.org/editions/2023/en/0x00-toc/)
+- [OWASP API Security Testing Framework](https://github.com/OWASP/www-project-api-security-testing-framework)
+- [PayloadsAllTheThings](https://github.com/swisskyrepo/PayloadsAllTheThings)
 
 ## Architecture
 
@@ -41,6 +47,8 @@ Reference documentation used to design this environment:
                          │ App Service (Linux, Node)  │   api/  (Express mock retail API)
                          │ mock retail/e-commerce API │   synthetic customers/orders/products
                          └──────────────┬────────────┘
+                                        ├── managed identity ──▶ Public Blob container
+                                        │                       (optional synthetic data only)
                                         │ logs / metrics
                                         ▼
                          ┌───────────────────────────┐
@@ -54,10 +62,10 @@ Reference documentation used to design this environment:
 
 | Folder | Purpose |
 |---|---|
-| [api/](./api) | Node.js/Express mock retail API with synthetic PII/PCI-shaped data, intentionally "noisy"/insecure endpoints (admin dumps, SSRF-shaped tool, oversized payload endpoints, parameter-driven filters) designed to trip specific Defender for APIs alert types. |
-| [apim/openapi.yaml](./apim/openapi.yaml) | OpenAPI 3.0.3 definition of all 15 endpoints, imported into API Management. This is also the artifact Defender for APIs uses to understand the API's schema (used for sensitive-data and schema-violation detections). |
+| [api/](./api) | Node.js/Express mock retail API with synthetic PII/PCI-shaped data, realistic anomaly traffic targets, an official suspicious-User-Agent validation relay, and bounded security-test endpoints. |
+| [apim/openapi.yaml](./apim/openapi.yaml) | OpenAPI 3.0.3 definition of the demo API paths, imported into API Management. This is also the artifact Defender for APIs uses to understand the API's schema (used for sensitive-data and schema-violation detections). |
 | [infra/](./infra) | ARM templates: one-click master deployment, core infra, API onboarding, application-content publishing, and optional subscription-level Defender plan enablement. |
-| [website/](./website) | Static HTML/CSS/JS "synthetic traffic generator" — a control panel for firing the scenarios that map to each Defender for APIs alert type. |
+| [website/](./website) | Static HTML/CSS/JS traffic generator that separates named Defender anomaly candidates, posture demonstrations, and OWASP/WAF telemetry exercises. |
 | [.github/workflows/](./.github/workflows) | GitHub Actions: infra deploy, website deploy, backend CI, and the MSDO DevOps-security scan. |
 | [docs/](./docs) | Deeper how-to guides referenced below. |
 
@@ -103,6 +111,23 @@ the content stage can run again on later master-template deployments.
 
 The `deployApplicationContent` parameter defaults to `true`. Set it to `false` only when you want
 to provision the hosts without publishing the backend and website.
+
+The intentionally public storage attack-path demo is disabled by default. Set
+`enablePublicSensitiveUploadContainer` to `true` to create the storage account and
+`sensitive-uploads` container, grant the Web App's managed identity write access, and enable the
+website upload flow. This permits anonymous reads of uploaded blobs by design. Use only synthetic
+data in a disposable demo environment.
+
+The controlled high-risk canary suite is also disabled by default. Set
+`enableControlledCanaryTests` to `true` to enable its scoped privilege-change, synthetic
+secret/file-read, fixed-code, and same-demo callback endpoints. This does not enable arbitrary
+file access, arbitrary code execution, or caller-selected callback URLs.
+
+Automated baseline generation is disabled by default. Set `enableAutomatedBaselineTraffic` to
+`true` to keep the App Service active and send one normal request per minute through APIM. This is
+about 43,200 calls over 30 days, excluding manually generated traffic. Use it to build the
+approximately 30-day history required by Defender for APIs anomaly models; a short browser session
+is not a substitute for that learning period.
 
 ### Option A — Azure CLI
 
@@ -208,36 +233,128 @@ it isn't mistaken for a gap in the implementation.
 
 Once the API is onboarded (`api-onboarding.json` applied) and the `Api` Defender plan is enabled
 (`pricing.json`, or enabled manually in the portal), open the deployed website and work through the
-scenario cards. Each card fires the specific traffic pattern documented in
-[Defender for APIs alerts](https://learn.microsoft.com/en-us/azure/defender-for-cloud/alerts-defender-for-apis)
-to trigger that alert:
+scenario cards. The cards are deliberately separated into named Defender anomaly candidates,
+posture demonstrations, and general API-security/WAF telemetry exercises.
 
-| Scenario card | Alert type | Endpoint(s) used |
+No simulation guarantees an alert. Microsoft's documented anomaly detections use an approximately
+30-day learned baseline. Tor and suspicious-IP alerts require a real network source with that
+reputation. The suspicious User-Agent alert is the only alert with a Microsoft-documented
+one-request validation procedure: the site invokes a fixed server-side relay that sends the exact
+`User-Agent: javascript:` request through APIM. Microsoft says the alert appears "after some time"
+and publishes no delivery SLA.
+
+- Use the sticky left navigation to jump between connection, baseline, upload, scenario-suite, and
+  activity-log sections.
+- Expand **Show exact request payload** on any test to generate its request preview from the same
+  code that runs the scenario. Repeated requests are collapsed and exceptionally large bodies are
+  shortened with their exact total length shown.
+- Standard alert-card parameters are under **Configure parameters** and remain collapsed by
+  default.
+- **Run all scenarios** executes every runnable card sequentially with its current configuration.
+  It excludes the continuous baseline toggle and informational-only cards. Default settings include
+  high-volume, multi-megabyte, and delayed requests, so allow the complete run time before starting
+  another suite.
+
+| Scenario card | Defender outcome | Endpoint(s) used |
 |---|---|---|
 | Traffic Spike Burst | `API_SpikeInAPITraffic` | `GET /api/products` |
-| Simulated Population Spike | `API_PopulationSpikeInAPITraffic` | `GET /api/products` (rotating client-id header) |
-| Large Request Payload | `API_SpikeInPayload` (request) | `POST /api/products/bulk-upload` |
-| Large Response Payload | `API_SpikeInPayload` (response) | `GET /api/admin/reports/large` |
-| Latency Spike | `API_LatencySpike` | `GET /api/tools/slow` |
-| Parameter Spray | `API_ParameterSpray`-style enumeration | `GET /api/orders?customerId=` |
-| Parameter Enumeration | sequential ID/parameter enumeration | `GET /api/customers/{id}` |
-| Unseen Parameter Type | undocumented/anomalous parameter *type* | `GET /api/search` |
-| Unseen Parameter | undocumented parameter *name* | `GET /api/search` |
-| Sensitive Data Exposure Walkthrough | sensitive-data-in-response detections | `GET /api/customers`, `GET /api/orders`, `GET /api/admin/users` |
-| Tor Exit Node / Suspicious IP Access | `API_AccessFromSuspiciousIP`-style | `GET /api/tools/health` (informational — must be run from a real Tor/threat-intel-flagged IP; see card for details) |
-| Suspicious User-Agent | request with known-attack-tool UA string (`sqlmap`, `Nikto`, ...) | `GET /api/tools/echo` |
-| Continuous baseline traffic | establishes the "normal" baseline the spike/latency/population detections compare against | `GET /api/products`, `GET /api/tools/health` |
+| Simulated Population Spike | `API_PopulationSpikeInAPITraffic`; multiple real source IPs are required | `GET /api/products` |
+| Large Request Payload | `API_SpikeInPayload` (request) | `POST /api/tools/upload` |
+| Large Response Payload | `API_SpikeInPayload` (response) | `GET /api/tools/large-report` |
+| Latency Spike | `API_SpikeInLatency` (Preview) | `GET /api/tools/delay` |
+| API Endpoint Spray | `API_SprayInRequests`; touches more than 30 documented operations | Multiple APIM operations |
+| Parameter Enumeration | `API_ParameterEnumeration`; distributed variant requires multiple real IPs | `GET /api/orders?customerId=` |
+| Unseen Parameter Type | `API_UnseenParamType` | `GET /api/orders` |
+| Unseen Parameter | `API_UnseenParam` | `GET /api/orders` |
+| Official Suspicious User-Agent Validation | `API_AccessFromSuspiciousUserAgent`; exact documented `javascript:` value | `POST /api/security/canary/suspicious-user-agent` relays to APIM health |
+| Sensitive Data Exposure Walkthrough | Posture/classification finding, not a runtime alert | Customer, payment, admin, and export endpoints |
+| Tor Exit Node / Suspicious IP Access | `API_AccessFromTorExitNode` / `API_AccessFromSuspiciousIP`; real reputation required | `GET /api/tools/health` |
+| Automated baseline traffic | One normal APIM call per minute for long-term model learning | Five normal read operations |
+| OWASP, PayloadsAllTheThings, and controlled canary suites | Investigation/WAF telemetry; no corresponding named Defender for APIs alerts | Multiple bounded test endpoints |
 
-Two cards (Tor/suspicious-IP and User-Agent) are flagged as **informational** in the UI because they
-require a real suspicious network origin or a literal attack-tool header string — the browser
-cannot spoof its own outbound IP, so the card instead gives you the exact `curl`/PowerShell command
-to run from a Tor exit node (for IP reputation) or as-is (for the User-Agent string), and explains
-why.
+SQL injection, command injection, SSRF, path traversal, BOLA, and generic authentication abuse do
+not map to named Defender for APIs alerts. Keep these suites for APIM logging, investigation
+workflows, and Azure WAF exercises rather than treating the absence of a Defender alert as a
+deployment failure. Sensitive-data discovery and unauthenticated endpoint inventory are posture
+findings, not runtime alerts.
 
-> Alerts in Defender for Cloud are driven by learned baselines and can take time to appear after
-> onboarding (the service needs a representative traffic history before some detectors activate).
-> Run the baseline-traffic toggle for a while before trying the spike/latency scenarios if alerts
-> don't show up immediately.
+The OWASP suite adapts non-destructive request shapes from the
+[OWASP API Security Testing Framework](https://github.com/OWASP/www-project-api-security-testing-framework)
+(Apache-2.0) and maps them to the
+[OWASP API Security Top 10 2023](https://api-security.owasp.org/editions/2023/en/0x00-toc/)
+(CC BY-SA 4.0). The mock backend records or echoes attack-shaped input but never makes SSRF
+callbacks, executes injected text, changes authorization state, persists mass-assignment fields,
+or evaluates deliberately vulnerable regular expressions.
+
+The separate **PayloadsAllTheThings API Traffic Suite** adapts API-relevant request shapes from
+[swisskyrepo/PayloadsAllTheThings](https://github.com/swisskyrepo/PayloadsAllTheThings) (MIT).
+It adds inert endpoints for observing duplicate parameters, XML entity declarations, redirect and
+traversal targets, header/CRLF values, generic injection strings, and prototype keys. Real request
+desynchronization, reverse shells, destructive or time-based SQL, credential attacks, external
+callbacks, filesystem reads, XML entity expansion, and unbounded denial-of-service payloads are
+excluded. The request-smuggling scenario transmits header names inside JSON rather than setting
+conflicting HTTP transport headers. See [THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md) for
+attribution.
+
+### Controlled high-risk canary actions
+
+Deploy with `enableControlledCanaryTests=true`, then use **Controlled High-Risk Canary Actions**
+on the website. These tests perform real but tightly bounded side effects:
+
+- **Privilege change:** changes only `synthetic-canary-user` in the current Node.js process from
+  `viewer` to `admin`. The website resets it immediately in a `finally` block, and the server
+  independently restores it after 30 seconds.
+- **Canary secret access:** reads only
+  `api/src/data/canarySecrets.json` or the `DEMO_CANARY_SECRET` synthetic app setting. Requested
+  paths and environment-variable names are recorded for telemetry but ignored.
+- **Fixed code execution:** executes one repository-defined string transformation in a Node.js
+  `vm` context with dynamic string/WASM code generation disabled and a 50 ms timeout.
+  Request-supplied code is recorded but never evaluated.
+- **Controlled callback:** makes one five-second-bounded HTTPS request to
+  `/retail/api/security/canary/callback-receiver` on this deployment's own APIM hostname. The
+  browser cannot supply a destination, and the API rejects non-HTTPS, non-APIM, or different-path
+  targets.
+
+The feature defaults to off because these operations intentionally produce real state-change,
+file/app-setting-read, execution, and outbound-request telemetry. The data and identity remain
+synthetic and grant no Azure permissions or access to real secrets.
+
+## Public Blob Storage attack-path walkthrough
+
+This optional workflow sends a file along the complete path:
+
+`Static Web App → API Management → App Service → managed identity → Blob Storage`
+
+1. Deploy with `enablePublicSensitiveUploadContainer=true`. In the GitHub workflow, select
+   **Create intentionally public synthetic-sensitive-data blob container**. For the one-click
+   deployment, set the corresponding template parameter to `true`.
+2. Enable Defender CSPM and its sensitive-data discovery extension by deploying
+   `infra/pricing.json` with `enableSensitiveDataDiscovery=true`, or configure the equivalent
+   plan in Defender for Cloud.
+3. Open the Static Web App and use **Upload synthetic sensitive data to public Blob Storage**.
+   Download one of the included samples first if needed:
+   - [synthetic-customer-records.json](./website/samples/synthetic-customer-records.json)
+   - [synthetic-payment-export.txt](./website/samples/synthetic-payment-export.txt)
+   - [synthetic-employee-directory.xml](./website/samples/synthetic-employee-directory.xml)
+4. Select the sample and click **Upload through API**. A successful response includes a link that
+   opens anonymously, confirming the intended public exposure.
+5. In Defender for Cloud, review **Attack path analysis**, **Cloud Security Explorer**, and the
+   storage account's data-security insights for paths or classifications involving public access
+   and sensitive data.
+
+Sensitive-data classification and attack-path correlation are asynchronous. Initial discovery can
+take hours or longer, and an individual upload does not guarantee that Defender for Cloud will
+produce a particular attack path. The API caps uploads at 5 MB, sanitizes file names, and accepts
+only base64-encoded content. Storage writes use the Web App's managed identity; storage account
+keys are disabled.
+
+> **Warning:** The container is deliberately public. Never upload real personal, financial,
+> credential, customer, or confidential data.
+
+To stop new uploads, redeploy with `enablePublicSensitiveUploadContainer=false`. Because ARM
+deployments use incremental mode, this disables the API feature but does not delete a storage
+account that was created previously. Delete the demo storage account or the entire resource group
+to remove existing public blobs.
 
 ## Known environment constraints
 
@@ -256,7 +373,8 @@ why.
   path.
 - **Synthetic data only**: `api/src/data/syntheticData.js` generates fake customers/orders/products/
   admin users at process start using a seeded faker-style generator. Nothing is persisted and no
-  real personal data is ever processed.
+  real personal data is ever processed. The optional Blob upload path persists only files you
+  explicitly select and must never be used with real data.
 
 ## Cleanup
 

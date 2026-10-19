@@ -68,6 +68,27 @@
         "description": "Node.js runtime version tag for the Linux Web App."
       }
     },
+    "enablePublicSensitiveUploadContainer": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Create an intentionally public blob container for synthetic sensitive-file uploads and Defender CSPM attack-path demonstrations. Never upload real data."
+      }
+    },
+    "enableControlledCanaryTests": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Enable scoped synthetic privilege, canary secret/file, fixed-code execution, and same-demo APIM callback tests."
+      }
+    },
+    "enableAutomatedBaselineTraffic": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Send one normal request per minute through APIM and keep the Web App active to build anomaly baselines."
+      }
+    },
     "apiId": {
       "type": "string",
       "defaultValue": "retail",
@@ -173,6 +194,15 @@
           },
           "nodeVersion": {
             "value": "[parameters('nodeVersion')]"
+          },
+          "enablePublicSensitiveUploadContainer": {
+            "value": "[parameters('enablePublicSensitiveUploadContainer')]"
+          },
+          "enableControlledCanaryTests": {
+            "value": "[parameters('enableControlledCanaryTests')]"
+          },
+          "enableAutomatedBaselineTraffic": {
+            "value": "[parameters('enableAutomatedBaselineTraffic')]"
           }
         }
       }
@@ -311,6 +341,22 @@
     "apiGatewayUrl": {
       "type": "string",
       "value": "[format('{0}/{1}', reference('coreInfrastructure').outputs.apimGatewayUrl.value, parameters('apiPath'))]"
+    },
+    "sensitiveUploadEnabled": {
+      "type": "bool",
+      "value": "[reference('coreInfrastructure').outputs.sensitiveUploadEnabled.value]"
+    },
+    "controlledCanaryTestsEnabled": {
+      "type": "bool",
+      "value": "[reference('coreInfrastructure').outputs.controlledCanaryTestsEnabled.value]"
+    },
+    "automatedBaselineTrafficEnabled": {
+      "type": "bool",
+      "value": "[reference('coreInfrastructure').outputs.automatedBaselineTrafficEnabled.value]"
+    },
+    "sensitiveUploadContainerUrl": {
+      "type": "string",
+      "value": "[reference('coreInfrastructure').outputs.sensitiveUploadContainerUrl.value]"
     },
     "defenderPlansRequested": {
       "type": "bool",

@@ -120,7 +120,14 @@ the deployment job uses a GitHub environment instead, change `subject` to
    `appServicePlanSku` if you need a different SKU than `B1` (see
    [README — known environment constraints](../README.md#known-environment-constraints) if you hit
    a quota error). Leave `enableDefenderPlans` as `false` for the first run unless you already know
-   the subscription needs the plans turned on.
+   the subscription needs the plans turned on. Set
+   `enablePublicSensitiveUploadContainer` to `true` only when you want the intentionally public
+   synthetic-data Blob Storage attack-path demo; it defaults to `false`. Set
+   `enableControlledCanaryTests` to `true` to enable the scoped synthetic privilege, canary
+   secret/file, fixed-code, and same-demo APIM callback tests; this also defaults to `false`. Set
+   `enableAutomatedBaselineTraffic` to `true` to keep the App Service active and send one normal
+   APIM request per minute for the approximately 30-day anomaly-learning period. That produces
+   about 43,200 calls per 30 days before manually generated traffic and also defaults to `false`.
 2. Watch the run. It performs, in order: `deploy-main` (resource group ARM deploy), `deploy-backend`
    (zip-deploys `api/` to the new Web App), `onboard-api` (imports `apim/openapi.yaml` into APIM and
    creates the `Microsoft.Security/apiCollections` resource), and optionally `deploy-pricing`.

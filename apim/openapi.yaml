@@ -18,6 +18,9 @@ tags:
   - name: Admin
   - name: Search
   - name: Tools
+  - name: OWASP Security Tests
+  - name: PayloadsAllTheThings Tests
+  - name: Controlled Canary Tests
 paths:
   /api/customers:
     get:
@@ -53,6 +56,26 @@ paths:
       responses:
         "200":
           description: Customer record
+        "404":
+          description: Not found
+    patch:
+      tags: [OWASP Security Tests]
+      summary: Synthetic mass-assignment probe
+      description: Accepts privilege-shaped properties but never persists changes.
+      operationId: patchCustomerSecurityTest
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200":
+          description: Synthetic response showing received property names
         "404":
           description: Not found
   /api/customers/{id}/payment-methods:
@@ -129,6 +152,20 @@ paths:
           description: Order record
         "404":
           description: Not found
+  /api/orders/checkout:
+    post:
+      tags: [OWASP Security Tests]
+      summary: Synthetic checkout flow
+      description: Safe non-persisted target for repeated sensitive-business-flow requests.
+      operationId: syntheticCheckout
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "202":
+          description: Synthetic checkout accepted
   /api/products:
     get:
       tags: [Products]
@@ -175,6 +212,25 @@ paths:
       responses:
         "200":
           description: Admin user list
+    put:
+      tags: [OWASP Security Tests]
+      summary: Synthetic admin method-escalation probe
+      operationId: updateAdminUsersSecurityTest
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200":
+          description: Probe recorded; no admin action executed
+    delete:
+      tags: [OWASP Security Tests]
+      summary: Synthetic admin delete-method probe
+      operationId: deleteAdminUsersSecurityTest
+      responses:
+        "200":
+          description: Probe recorded; no admin action executed
   /api/admin/export:
     get:
       tags: [Admin]
@@ -268,3 +324,369 @@ paths:
       responses:
         "200":
           description: Delayed response
+  /api/auth/login:
+    post:
+      tags: [OWASP Security Tests]
+      summary: Synthetic login endpoint
+      description: Receives malformed-token and credential-spray traffic without authenticating users.
+      operationId: syntheticLogin
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "401":
+          description: Authentication rejected
+  /api/auth/verify-otp:
+    post:
+      tags: [OWASP Security Tests]
+      summary: Synthetic OTP verification endpoint
+      operationId: syntheticVerifyOtp
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "401":
+          description: Verification rejected
+  /api/tools/fetch:
+    get:
+      tags: [OWASP Security Tests]
+      summary: Safe SSRF-shaped input sink
+      description: Records target URL parameters but never makes an outbound request.
+      operationId: syntheticFetch
+      parameters:
+        - name: url
+          in: query
+          schema: { type: string, format: uri }
+      responses:
+        "200":
+          description: Target recorded and blocked
+  /api/debug/{probe}:
+    get:
+      tags: [OWASP Security Tests]
+      summary: Synthetic debug-path probe
+      operationId: syntheticDebugProbe
+      parameters:
+        - name: probe
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Synthetic debug response
+  /api/v0/customers:
+    get:
+      tags: [OWASP Security Tests]
+      summary: Synthetic deprecated API version
+      operationId: listLegacyCustomers
+      responses:
+        "200":
+          description: Small synthetic legacy customer response
+  /api/v1/products:
+    get:
+      tags: [OWASP Security Tests]
+      summary: Versioned product inventory
+      operationId: listVersionedProducts
+      responses:
+        "200":
+          description: Versioned product list
+  /api/integrations/webhook:
+    post:
+      tags: [OWASP Security Tests]
+      summary: Safe third-party input sink
+      description: Echoes injection-shaped input as inert data without evaluating or forwarding it.
+      operationId: syntheticWebhook
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "202":
+          description: Input accepted as inert data
+  /api/graphql:
+    post:
+      tags: [OWASP Security Tests]
+      summary: Synthetic GraphQL probe endpoint
+      description: Identifies introspection and batching shapes without executing a GraphQL schema.
+      operationId: syntheticGraphql
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                - type: array
+                  items: { type: object }
+      responses:
+        "200":
+          description: Synthetic GraphQL analysis
+  /api/tools/regex:
+    post:
+      tags: [OWASP Security Tests]
+      summary: Safe ReDoS-shaped input sink
+      description: Measures input length without evaluating a regular expression.
+      operationId: syntheticRegexProbe
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200":
+          description: Input measured but not evaluated
+  /api/security/probe:
+    post:
+      tags: [PayloadsAllTheThings Tests]
+      summary: Record a generic attack-shaped payload as inert data
+      description: Never evaluates, forwards, executes, or persists the supplied payload.
+      operationId: recordSecurityProbe
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [category, payload]
+              properties:
+                category: { type: string }
+                payload: {}
+      responses:
+        "200":
+          description: Payload shape recorded
+  /api/security/parameters:
+    get:
+      tags: [PayloadsAllTheThings Tests]
+      summary: Observe duplicate and nested HTTP parameters
+      operationId: inspectSecurityParameters
+      parameters:
+        - name: id
+          in: query
+          schema: { type: string }
+        - name: role
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Query parameters observed without authorization changes
+  /api/security/xml:
+    post:
+      tags: [PayloadsAllTheThings Tests]
+      summary: Inspect XXE-shaped XML without parsing it
+      description: Treats XML as bounded text and never resolves DTDs or external entities.
+      operationId: inspectSecurityXml
+      requestBody:
+        required: true
+        content:
+          application/xml:
+            schema: { type: string, maxLength: 65536 }
+          text/xml:
+            schema: { type: string, maxLength: 65536 }
+      responses:
+        "200":
+          description: XML signatures inspected without parsing
+  /api/security/redirect:
+    get:
+      tags: [PayloadsAllTheThings Tests]
+      summary: Record an open-redirect-shaped target without redirecting
+      operationId: inspectSecurityRedirect
+      parameters:
+        - name: next
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Target recorded without a redirect response
+  /api/security/path:
+    get:
+      tags: [PayloadsAllTheThings Tests]
+      summary: Detect traversal-shaped input without filesystem access
+      operationId: inspectSecurityPath
+      parameters:
+        - name: value
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Path shape inspected without resolution or file access
+  /api/security/headers:
+    get:
+      tags: [PayloadsAllTheThings Tests]
+      summary: Observe CORS and CRLF-shaped header input safely
+      operationId: inspectSecurityHeaders
+      parameters:
+        - name: value
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Header shape returned as JSON only
+  /api/security/prototype:
+    post:
+      tags: [PayloadsAllTheThings Tests]
+      summary: Detect prototype-pollution-shaped JSON without merging
+      operationId: inspectSecurityPrototype
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200":
+          description: Prototype keys inspected without mutation
+  /api/security/canary/privilege:
+    post:
+      tags: [Controlled Canary Tests]
+      summary: Temporarily elevate the ephemeral synthetic canary user
+      description: >
+        Changes only an in-memory synthetic role and automatically restores
+        it within 30 seconds. The reset action restores it immediately.
+      operationId: changeCanaryPrivilege
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action:
+                  type: string
+                  enum: [elevate, reset, status]
+      responses:
+        "200":
+          description: Canary user state returned
+        "503":
+          description: Controlled canary tests are disabled
+  /api/security/canary/secret:
+    get:
+      tags: [Controlled Canary Tests]
+      summary: Read a dedicated synthetic canary secret or file
+      description: >
+        Reads only the allowlisted synthetic canary file or synthetic app
+        setting. Any caller-supplied path is recorded but ignored.
+      operationId: readCanarySecret
+      parameters:
+        - name: source
+          in: query
+          schema:
+            type: string
+            enum: [file, environment]
+        - name: path
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Synthetic canary data returned
+        "400":
+          description: Unsupported source
+        "503":
+          description: Controlled canary tests are disabled
+  /api/security/canary/execute:
+    post:
+      tags: [Controlled Canary Tests]
+      summary: Run fixed code in a restricted VM
+      description: >
+        Executes only a fixed allowlisted expression with a 50 ms timeout.
+        Request-supplied code is recorded but never evaluated.
+      operationId: executeCanaryCode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                input: { type: string, maxLength: 128 }
+                code: { type: string, maxLength: 512 }
+      responses:
+        "200":
+          description: Fixed execution result
+        "503":
+          description: Controlled canary tests are disabled
+  /api/security/canary/callback:
+    post:
+      tags: [Controlled Canary Tests]
+      summary: Send a callback to this demo through APIM
+      description: >
+        Makes one bounded HTTPS request to a fixed APIM callback receiver in
+        the same demo. The caller cannot supply or change the target URL.
+      operationId: triggerCanaryCallback
+      responses:
+        "200":
+          description: Callback sent and confirmed
+        "502":
+          description: Callback receiver failed
+        "503":
+          description: Controlled canary tests are disabled or unconfigured
+  /api/security/canary/callback-receiver:
+    post:
+      tags: [Controlled Canary Tests]
+      summary: Receive the fixed controlled callback
+      operationId: receiveCanaryCallback
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                eventId: { type: string, format: uuid }
+                marker: { type: string }
+      responses:
+        "200":
+          description: Callback received
+        "401":
+          description: Synthetic callback token missing or invalid
+        "503":
+          description: Controlled canary tests are disabled
+  /api/security/canary/suspicious-user-agent:
+    post:
+      tags: [Controlled Canary Tests]
+      summary: Send the official suspicious User-Agent validation request
+      description: >
+        Sends one fixed request through this demo's APIM gateway with
+        User-Agent set to javascript:, matching Microsoft's Defender for APIs
+        validation guidance. The caller cannot change the target or header.
+      operationId: validateSuspiciousUserAgentAlert
+      responses:
+        "200":
+          description: Validation request reached the target operation
+        "502":
+          description: APIM target request failed
+        "503":
+          description: Controlled canary tests are disabled or unconfigured
+  /api/storage/upload:
+    post:
+      tags: [OWASP Security Tests]
+      summary: Upload synthetic sensitive data to the public demo container
+      description: >
+        Accepts a file encoded as base64 JSON and writes it to Azure Blob
+        Storage using the App Service managed identity. Available only when
+        enablePublicSensitiveUploadContainer is true. The resulting blob is
+        intentionally publicly readable for Defender CSPM demonstrations.
+      operationId: uploadSyntheticSensitiveFile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fileName, contentBase64]
+              properties:
+                fileName: { type: string }
+                contentType: { type: string }
+                contentBase64: { type: string, format: byte }
+      responses:
+        "201":
+          description: File uploaded
+        "400":
+          description: Invalid request
+        "413":
+          description: File exceeds 5 MB
+        "503":
+          description: Upload demo is disabled

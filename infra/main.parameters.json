@@ -8,6 +8,9 @@
     "apimPublisherName": { "value": "Defender for APIs Demo" },
     "apimSku": { "value": "Developer" },
     "appServicePlanSku": { "value": "B1" },
-    "nodeVersion": { "value": "18-lts" }
+    "nodeVersion": { "value": "18-lts" },
+    "enablePublicSensitiveUploadContainer": { "value": false },
+    "enableControlledCanaryTests": { "value": false },
+    "enableAutomatedBaselineTraffic": { "value": false }
   }
 }

@@ -27,6 +27,30 @@ on:
         description: "App Service Plan SKU (use F1 if your subscription has no B1/Standard quota)"
         required: false
         default: "B1"
+      enablePublicSensitiveUploadContainer:
+        description: "Create intentionally public synthetic-sensitive-data blob container"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "true"
+          - "false"
+      enableControlledCanaryTests:
+        description: "Enable scoped privilege, canary secret/file, fixed-code, and callback tests"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "true"
+          - "false"
+      enableAutomatedBaselineTraffic:
+        description: "Send one normal APIM request per minute to build the 30-day anomaly baseline"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "true"
+          - "false"
 
 permissions:
   id-token: write
@@ -73,6 +97,9 @@ jobs:
             ./infra/main.parameters.json
             apimPublisherEmail=${{ secrets.APIM_PUBLISHER_EMAIL }}
             appServicePlanSku=${{ github.event.inputs.appServicePlanSku }}
+            enablePublicSensitiveUploadContainer=${{ github.event.inputs.enablePublicSensitiveUploadContainer }}
+            enableControlledCanaryTests=${{ github.event.inputs.enableControlledCanaryTests }}
+            enableAutomatedBaselineTraffic=${{ github.event.inputs.enableAutomatedBaselineTraffic }}
           deploymentName: defender-apis-main-${{ github.run_number }}
           failOnStdErr: false
 

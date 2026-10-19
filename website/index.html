@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Defender for APIs - Synthetic Traffic Generator</title>
-  <link rel="stylesheet" href="assets/style.css" />
+  <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
   <header class="site-header">
@@ -20,16 +20,29 @@
     </div>
   </header>
 
-  <main>
+  <div class="app-shell">
+    <nav class="side-nav" aria-label="Testing sections">
+      <strong>Testing sections</strong>
+      <a href="#settings-card">Connect to API</a>
+      <a href="#baseline-card">Baseline traffic</a>
+      <a href="#sensitive-upload-card">Sensitive upload</a>
+      <a href="#scenarios-section">Alert &amp; posture</a>
+      <a href="#scenario-owasp-api-top-10">OWASP suite</a>
+      <a href="#scenario-payloads-all-the-things">Payload suite</a>
+      <a href="#scenario-controlled-canary-actions">Controlled canaries</a>
+      <a href="#console-card">Activity log</a>
+    </nav>
+
+    <main>
     <section class="card settings-card" id="settings-card">
       <h2>1. Connect to your API</h2>
       <p>Enter the API base URL - the APIM gateway URL plus the published API path suffix (default <code>/retail</code>), for example:
         <code>https://&lt;apim-name&gt;.azure-api.net/retail</code>.
         You can also point this directly at the App Service URL for local/backend-only testing.</p>
       <div class="settings-row">
-        <input type="text" id="api-base-url" placeholder="https://your-apim-name.azure-api.net/retail" autocomplete="off" />
-        <button id="btn-save-url" class="btn btn-primary">Save</button>
-        <button id="btn-test-connection" class="btn btn-secondary">Test connection</button>
+        <input type="text" id="api-base-url" placeholder="https://your-apim-name.azure-api.net/retail" autocomplete="off">
+        <button type="button" id="btn-save-url" class="btn btn-primary">Save</button>
+        <button type="button" id="btn-test-connection" class="btn btn-secondary">Test connection</button>
         <span id="connection-status" class="status-pill status-unknown">Not tested</span>
       </div>
     </section>
@@ -38,7 +51,7 @@
       <div class="card-head">
         <h2>2. Continuous baseline traffic <span class="badge badge-info">Context</span></h2>
         <label class="switch">
-          <input type="checkbox" id="baseline-toggle" />
+          <input type="checkbox" id="baseline-toggle">
           <span class="slider"></span>
         </label>
       </div>
@@ -47,19 +60,71 @@
         generate a steady trickle of lightweight, "normal" requests (<code>GET /api/products</code>, <code>GET /api/tools/health</code>)
         every few seconds in the background while you work through the scenarios below.</p>
       <p class="hint" id="baseline-status">Baseline traffic is currently <strong>off</strong>.</p>
+      <details class="payload-preview">
+        <summary>Show exact request payloads</summary>
+        <pre>GET /api/products?pageSize=5
+GET /api/tools/health
+
+One request is selected every approximately four seconds.</pre>
+      </details>
     </section>
 
-    <h2 class="section-title">3. Alert &amp; posture scenarios</h2>
-    <div class="scenario-grid" id="scenario-grid"><!-- cards rendered by app.js --></div>
+    <section class="card" id="sensitive-upload-card">
+      <div class="card-head">
+        <h2>3. Upload synthetic sensitive data to public Blob Storage <span class="badge badge-info">Attack path demo</span></h2>
+      </div>
+      <p>Select a synthetic test file. The browser sends it through APIM to the mock API, which writes
+        it to the parameter-gated <code>sensitive-uploads</code> container using managed identity.
+        The container intentionally permits anonymous blob reads so Defender CSPM can correlate
+        public exposure with sensitive-data discovery. <strong>Never upload real or confidential data.</strong></p>
+      <div class="settings-row">
+        <input type="file" id="sensitive-file-input">
+        <button type="button" id="btn-upload-sensitive-file" class="btn btn-primary">Upload through API</button>
+        <span id="upload-status" class="status-pill status-unknown">No file selected</span>
+      </div>
+      <p class="hint sample-links">
+        Download a synthetic sample:
+        <a href="samples/synthetic-customer-records.json" download>customer records (JSON)</a>,
+        <a href="samples/synthetic-payment-export.txt" download>payment export (TXT)</a>, or
+        <a href="samples/synthetic-employee-directory.xml" download>employee directory (XML)</a>.
+      </p>
+      <p class="hint" id="upload-result"></p>
+      <details class="payload-preview">
+        <summary>Show exact request payload</summary>
+        <pre>POST /api/storage/upload
+Content-Type: application/json
+
+{
+  "fileName": "&lt;selected file name&gt;",
+  "contentType": "&lt;selected file MIME type&gt;",
+  "contentBase64": "&lt;exact selected file bytes encoded as base64&gt;"
+}</pre>
+      </details>
+    </section>
+
+    <section id="scenarios-section">
+      <div class="section-toolbar">
+        <div>
+          <h2 class="section-title">4. Alert &amp; posture scenarios</h2>
+          <p class="hint">Run cards individually, or run every runnable card sequentially with its current configuration.</p>
+        </div>
+        <div class="run-all-controls">
+          <button type="button" id="btn-run-all-scenarios" class="btn btn-primary">Run all scenarios</button>
+          <span id="run-all-status" class="status-pill status-unknown">Ready</span>
+        </div>
+      </div>
+      <div class="scenario-grid" id="scenario-grid"><!-- cards rendered by app.js --></div>
+    </section>
 
     <section class="card" id="console-card">
       <div class="card-head">
         <h2>Activity log</h2>
-        <button id="btn-clear-log" class="btn btn-secondary btn-small">Clear</button>
+        <button type="button" id="btn-clear-log" class="btn btn-secondary btn-small">Clear</button>
       </div>
       <pre id="console-log" aria-live="polite"></pre>
     </section>
-  </main>
+    </main>
+  </div>
 
   <footer class="site-footer">
     <p>All data returned by this API is synthetic and generated at random on server start. No real customer, payment, or identity data is involved.

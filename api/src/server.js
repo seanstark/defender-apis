@@ -11,6 +11,9 @@ const productsRouter = require('./routes/products');
 const adminRouter = require('./routes/admin');
 const searchRouter = require('./routes/search');
 const toolsRouter = require('./routes/tools');
+const securityTestsRouter = require('./routes/securityTests');
+const storageRouter = require('./routes/storage');
+const { startAutomatedBaselineTraffic } = require('./services/baselineTraffic');
 
 const app = express();
 
@@ -54,6 +57,31 @@ app.get('/', (req, res) => {
       'GET /api/tools/large-report',
       'POST /api/tools/upload',
       'GET /api/tools/delay',
+      'POST /api/auth/login',
+      'POST /api/auth/verify-otp',
+      'PATCH /api/customers/:id',
+      'POST /api/orders/checkout',
+      'GET /api/tools/fetch',
+      'GET /api/debug/:probe',
+      'GET /api/v0/customers',
+      'GET /api/v1/products',
+      'POST /api/integrations/webhook',
+      'POST /api/graphql',
+      'POST /api/tools/regex',
+      'POST /api/security/probe',
+      'GET /api/security/parameters',
+      'POST /api/security/xml',
+      'GET /api/security/redirect',
+      'GET /api/security/path',
+      'GET /api/security/headers',
+      'POST /api/security/prototype',
+      'POST /api/security/canary/privilege',
+      'GET /api/security/canary/secret',
+      'POST /api/security/canary/execute',
+      'POST /api/security/canary/callback',
+      'POST /api/security/canary/callback-receiver',
+      'POST /api/security/canary/suspicious-user-agent',
+      'POST /api/storage/upload',
     ],
   });
 });
@@ -68,6 +96,8 @@ app.use('/api/products', productsRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/search', searchRouter);
 app.use('/api/tools', toolsRouter);
+app.use('/api/storage', storageRouter);
+app.use('/api', securityTestsRouter);
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
@@ -82,6 +112,7 @@ app.use((req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`defender-apis mock API listening on port ${PORT}`);
+  startAutomatedBaselineTraffic();
 });
 
 module.exports = app;

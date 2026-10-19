@@ -60,9 +60,9 @@
       }
     },
     {
-      "type": "Microsoft.ApiManagement/service/apis/providers/apiCollections",
+      "type": "Microsoft.ApiManagement/service/providers/apiCollections",
       "apiVersion": "2023-11-15",
-      "name": "[format('{0}/{1}/Microsoft.Security/default', parameters('apimServiceName'), parameters('apiId'))]",
+      "name": "[format('{0}/Microsoft.Security/{1}', parameters('apimServiceName'), parameters('apiId'))]",
       "dependsOn": [
         "[resourceId('Microsoft.ApiManagement/service/apis', parameters('apimServiceName'), parameters('apiId'))]"
       ]
